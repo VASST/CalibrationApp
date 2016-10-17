@@ -176,7 +176,9 @@ void mainWidget::ovrvision()
 	OVR::OvrvisionSetting ovrset(&OvrvisionProHandle);
 	ovrset.ReadEEPROM();
 	cv::Mat leftIntrinsic;
+	cv::Mat leftDistortion;
 	leftIntrinsic = ovrset.m_leftCameraInstric;
+	leftDistortionParam = ovrset.m_leftCameraDistortion;
 	leftIntrinsicParam = Matrix<double>(3, 3);
 	leftIntrinsicParam[0][0] = leftIntrinsic.at<double>(0, 0);
 	leftIntrinsicParam[0][1] = 0;
@@ -454,7 +456,7 @@ void mainWidget::setupVTKPipeline() {
 	ren->SetBackground(.1, .2, .4);
 	qvtk->GetRenderWindow()->AddRenderer(ren);
 
-	myTracker->LoadVirtualSROM(4, "I:/Stylus.rom"); // reference rom in port 4
+	myTracker->LoadVirtualSROM(4, "I:/Stylus_PRevision3.rom"); // reference rom in port 4
 	referenceCoil = myTracker->GetTool(4);
 	myTracker->LoadVirtualSROM(5, "I:/HMD.rom"); // oculusHMD rom in port 5
 	oculusHMD = myTracker->GetTool(5);
@@ -695,6 +697,161 @@ void mainWidget::pivotCalibration(bool checked)
 	}
 }
 
+void mainWidget::viewScene(bool checked)
+{
+	if (checked)
+	{
+		if (OvrvisionProHandle.isOpen())
+		{
+			OvrvisionProHandle.Close();
+		}
+
+		// Requested capture format
+		OVR::OvrvisionPro OvrvisionProHandle;
+		OVR::Camprop RequestedFormat(OVR::OV_CAMVR_FULL); // 960x950
+		bool CameraSync(true);
+
+		//Create a renderer, render window, and interactor
+		vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
+		vtkSmartPointer<vtkRenderWindow> renderWindow = vtkSmartPointer<vtkRenderWindow>::New();
+		renderWindow->AddRenderer(renderer);
+
+		vtkSmartPointer<vtkRenderWindowInteractor> renderWindowInteractor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+		renderWindowInteractor->SetRenderWindow(renderWindow);
+
+		vtkOpenVRRenderWindow* vrWindow = dynamic_cast<vtkOpenVRRenderWindow*>(renderWindow.Get());
+
+		vrWindow->SetTexturedBackground(true);
+
+		// 10DE is NVIDIA vendor ID
+		auto vendor = "NVIDIA Corporation";
+		if (!OvrvisionProHandle.Open(0, RequestedFormat, vendor)) // We don't need to share it with OpenGL/D3D, but in the future we could access the images in GPU memory
+		{
+			printf("Unable to connect to OvrvisionPro device.");
+			exit(1);
+		}
+
+		OvrvisionProHandle.SetCameraSyncMode(CameraSync);
+
+		//Render Window
+		vtkSmartPointer<vtkTexture> textureLeft =
+			vtkSmartPointer<vtkTexture>::New();
+		vtkSmartPointer<vtkTexture> textureRight =
+			vtkSmartPointer<vtkTexture>::New();
+
+		vtkSmartPointer<vtkImageImport> imageImportLeft =
+			vtkSmartPointer<vtkImageImport>::New();
+
+		vtkSmartPointer<vtkImageImport> imageImportRight =
+			vtkSmartPointer<vtkImageImport>::New();
+
+		vrWindow->AddRenderer(renderer);
+
+		// Grab Left and Right Images
+		cv::Mat matLeft(OvrvisionProHandle.GetCamHeight(), OvrvisionProHandle.GetCamWidth(), CV_8UC4, OvrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_LEFT));
+		cv::Mat matRight(OvrvisionProHandle.GetCamHeight(), OvrvisionProHandle.GetCamWidth(), CV_8UC4, OvrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_RIGHT));
+
+		cv::Mat rgbMatLeft;
+		cv::Mat finalMatLeft;
+		cv::Mat rgbMatRight;
+		cv::Mat finalMatRight;
+
+		// Check Focal and Principal Points
+		OVR::OvrvisionSetting ovrset(&OvrvisionProHandle);
+		ovrset.ReadEEPROM();
+		cv::Mat leftIntrinsic;
+		leftIntrinsic = ovrset.m_leftCameraInstric;
+		double focalLeftX = leftIntrinsic.at<double>(0, 0);
+		double focalLeftY = leftIntrinsic.at<double>(1, 1);
+		double principalLeftX = leftIntrinsic.at<double>(0, 2);
+		double principalLeftY = leftIntrinsic.at<double>(1, 2);
+
+		cv::Mat rightIntrinsic;
+		rightIntrinsic = ovrset.m_rightCameraInstric;
+		double focalRightX = rightIntrinsic.at<double>(0, 0);
+		double focalRightY = rightIntrinsic.at<double>(1, 1);
+		double principalRightX = rightIntrinsic.at<double>(0, 2);
+		double principalRightY = rightIntrinsic.at<double>(1, 2);
+
+		// Convert From BGRA to RGB
+		cv::cvtColor(matLeft, rgbMatLeft, CV_BGRA2RGB);
+		cv::cvtColor(matRight, rgbMatRight, CV_BGRA2RGB);
+
+		// Flip Orientation for VTK
+		cv::flip(rgbMatLeft, finalMatLeft, 0);
+		cv::flip(rgbMatRight, finalMatRight, 0);
+
+		// Convert image from opencv to vtk
+		imageImportLeft->SetDataSpacing(1, 1, 1);
+		imageImportLeft->SetDataOrigin(0, 0, 0);
+		imageImportLeft->SetWholeExtent(0, finalMatLeft.size().width - 1, 0, finalMatLeft.size().height - 1, 0, 0);
+		imageImportLeft->SetDataExtentToWholeExtent();
+		imageImportLeft->SetDataScalarTypeToUnsignedChar();
+		imageImportLeft->SetNumberOfScalarComponents(finalMatLeft.channels());
+		imageImportLeft->SetImportVoidPointer(finalMatLeft.data);
+		imageImportLeft->Modified();
+		imageImportLeft->Update();
+
+		imageImportRight->SetDataSpacing(1, 1, 1);
+		imageImportRight->SetDataOrigin(0, 0, 0);
+		imageImportRight->SetWholeExtent(0, finalMatRight.size().width - 1, 0, finalMatRight.size().height - 1, 0, 0);
+		imageImportRight->SetDataExtentToWholeExtent();
+		imageImportRight->SetDataScalarTypeToUnsignedChar();
+		imageImportRight->SetNumberOfScalarComponents(finalMatRight.channels());
+		imageImportRight->SetImportVoidPointer(finalMatRight.data);
+		imageImportRight->Modified();
+		imageImportRight->Update();
+
+		textureLeft->SetInputConnection(imageImportLeft->GetOutputPort());
+		textureRight->SetInputConnection(imageImportRight->GetOutputPort());
+
+		vrWindow->SetLeftBackgroundTexture(textureLeft);
+		vrWindow->SetRightBackgroundTexture(textureRight);
+
+		while (trackerWidget->viewSceneButton->isChecked() == true)
+		{
+			// Query the SDK for the latest frames
+			OvrvisionProHandle.PreStoreCamData(OVR::OV_CAMQT_DMSRMP);
+
+			// Grab Left and Right Images
+			cv::Mat matLeft(OvrvisionProHandle.GetCamHeight(), OvrvisionProHandle.GetCamWidth(), CV_8UC4, OvrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_LEFT));
+			cv::Mat matRight(OvrvisionProHandle.GetCamHeight(), OvrvisionProHandle.GetCamWidth(), CV_8UC4, OvrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_RIGHT));
+
+			// Convert From BGRA to RGB
+			cv::cvtColor(matLeft, rgbMatLeft, CV_BGRA2RGB);
+			cv::cvtColor(matRight, rgbMatRight, CV_BGRA2RGB);
+
+			// Flip Orientation for VTK
+			cv::flip(rgbMatLeft, finalMatLeft, 0);
+			cv::flip(rgbMatRight, finalMatRight, 0);
+
+			// Update
+			imageImportLeft->Modified();
+			imageImportLeft->Update();
+			imageImportRight->Modified();
+			imageImportRight->Update();
+
+			textureLeft->Modified();
+			textureRight->Modified();
+			textureLeft->Update();
+			textureRight->Update();
+
+			// Render
+			vrWindow->Render();
+			SDL_Event event;
+			SDL_WaitEvent(&event);
+		}
+	}
+
+	if (!checked)
+	{
+		if (OvrvisionProHandle.isOpen())
+		{
+			OvrvisionProHandle.Close();
+		}
+	}
+}
+
 /*!
 * Create a dock window for controlling NDI tracker
 */
@@ -835,6 +992,9 @@ void mainWidget::createControlDock()
 
 		connect(trackerWidget->manualButton, SIGNAL(toggled(bool)),
 			this, SLOT(manualSelection(bool)));
+
+		connect(trackerWidget->viewSceneButton, SIGNAL(toggled(bool)),
+			this, SLOT(viewScene(bool)));
 
 		// Calibration widget
 		QDockWidget *stylusDock = new QDockWidget(tr("Stylus tip calibration"), this);
@@ -1008,6 +1168,7 @@ void mainWidget::getTransform()
 
 		// Calculate point to line
 		p2l(X, origin, dNormalized, tol, rotation, translation, error);
+
 		double x = translation[0][0];
 		double y = translation[1][0];
 		double z = translation[2][0];
@@ -1023,6 +1184,132 @@ void mainWidget::getTransform()
 		double row3col1 = rotation[2][0];
 		double row3col2 = rotation[2][1];
 		double row3col3 = rotation[2][2];
+
+		vtkSmartPointer<vtkMatrix4x4> point2Line = vtkSmartPointer<vtkMatrix4x4>::New();
+		point2Line->SetElement(0, 0, row1col1);
+		point2Line->SetElement(0, 1, row1col2);
+		point2Line->SetElement(0, 2, row1col3);
+
+		point2Line->SetElement(1, 0, row2col1);
+		point2Line->SetElement(1, 1, row2col2);
+		point2Line->SetElement(1, 2, row2col3);
+
+		point2Line->SetElement(2, 0, row3col1);
+		point2Line->SetElement(2, 1, row3col2);
+		point2Line->SetElement(2, 2, row3col3);
+
+		point2Line->SetElement(0, 3, x);
+		point2Line->SetElement(1, 3, y);
+		point2Line->SetElement(2, 3, z);
+
+		point2Line->SetElement(3, 0, 0);
+		point2Line->SetElement(3, 1, 0);
+		point2Line->SetElement(3, 2, 0);
+		point2Line->SetElement(3, 3, 1);
+
+		// tool transform = referenceCoil->GetTransform()
+		// HMD transform inverse = oculusHMD->GetTransform()->GetLinearInverse()
+		vtkSmartPointer< vtkTransform > posMatrix =
+			vtkSmartPointer< vtkTransform >::New();
+		posMatrix->PostMultiply();
+		posMatrix->Identity();
+		posMatrix->Concatenate(referenceCoil->GetTransform());
+		posMatrix->Concatenate(oculusHMD->GetTransform()->GetLinearInverse());
+		posMatrix->Concatenate(point2Line);
+		double posePosition[3];
+		Matrix<double> posePositionM(3, 1);
+		Matrix<double> result(3, 1);
+		posMatrix->GetPosition(posePosition);
+		
+		cv::Mat objectPoints(1, 3, CV_64FC1);
+		objectPoints.at<double>(0, 0) = posePosition[0];
+		objectPoints.at<double>(0, 1) = posePosition[1];
+		objectPoints.at<double>(0, 2) = posePosition[2];
+
+		cv::Mat rvec(3, 1, CV_64FC1);
+		rvec.at<double>(0, 0) = 0.0;
+		rvec.at<double>(1, 0) = 0.0;
+		rvec.at<double>(2, 0) = 0.0;
+
+		cv::Mat tvec(3, 1, CV_64FC1);
+		tvec.at<double>(0, 0) = 0.0;
+		tvec.at<double>(1, 0) = 0.0;
+		tvec.at<double>(2, 0) = 0.0;
+
+		cv::Mat intrinsic(3, 3, CV_64FC1);
+		intrinsic.at<double>(0, 0) = leftIntrinsicParam[0][0];
+		intrinsic.at<double>(0, 1) = leftIntrinsicParam[0][1];
+		intrinsic.at<double>(0, 2) = leftIntrinsicParam[0][2];
+		intrinsic.at<double>(1, 0) = leftIntrinsicParam[1][0];
+		intrinsic.at<double>(1, 1) = leftIntrinsicParam[1][1];
+		intrinsic.at<double>(1, 2) = leftIntrinsicParam[1][2];
+		intrinsic.at<double>(2, 0) = leftIntrinsicParam[2][0];
+		intrinsic.at<double>(2, 1) = leftIntrinsicParam[2][1];
+		intrinsic.at<double>(2, 2) = leftIntrinsicParam[2][2];
+
+		cv::Mat distortion(1, 8, CV_64FC1);
+		distortion.at<double>(0, 0) = leftDistortionParam[0];
+		distortion.at<double>(0, 1) = leftDistortionParam[1];
+		distortion.at<double>(0, 2) = leftDistortionParam[2];
+		distortion.at<double>(0, 3) = leftDistortionParam[3];
+		distortion.at<double>(0, 4) = leftDistortionParam[4];
+		distortion.at<double>(0, 5) = leftDistortionParam[5];
+		distortion.at<double>(0, 6) = leftDistortionParam[6];
+		distortion.at<double>(0, 7) = leftDistortionParam[7];
+
+		vector<Point2d> projectedPoints;
+		projectPoints(objectPoints, rvec, tvec, intrinsic, distortion, projectedPoints);
+
+		vector<Point2f> center(1);
+		center[0].x = projectedPoints[0].x;
+		center[0].y = projectedPoints[0].y;
+
+		// Query the SDK for the latest frames
+		OvrvisionProHandle.PreStoreCamData(OVR::OV_CAMQT_DMSRMP);
+
+		// Grab Left and Right Images
+		cv::Mat matLeft(OvrvisionProHandle.GetCamHeight(), OvrvisionProHandle.GetCamWidth(), CV_8UC4, OvrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_LEFT));
+		cv::Mat matRight(OvrvisionProHandle.GetCamHeight(), OvrvisionProHandle.GetCamWidth(), CV_8UC4, OvrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_RIGHT));
+
+		// circle center
+		circle(matLeft, center[0], 3, (0, 100, 100), -1, 8, 0);
+		// circle outline
+		circle(matLeft, center[0], 14, Scalar(100, 100, 100), 3, 8, 0);
+
+		/// Show your results
+		cv::namedWindow("Circle Found", CV_WINDOW_AUTOSIZE);
+		cv::imshow("Circle Found", matLeft);
+		cv::waitKey(0);
+
+		cv::Mat hsv;
+		cv::Mat threshold;
+		// Convert BGRA image to HSV image
+		cv::cvtColor(matLeft, hsv, COLOR_BGR2HSV);
+
+		// Filter everything except red - (0, 70, 50) -> (10, 255, 255) & (160, 70, 50) -> (179, 255, 255)
+		cv::inRange(hsv, cv::Scalar(HMinLower->value(), SMinLower->value(), VMinLower->value()), cv::Scalar(HMaxLower->value(), SMaxLower->value(), VMaxLower->value()), thresholdFinal);
+		cv::inRange(hsv, cv::Scalar(HMinUpper->value(), SMinUpper->value(), VMinUpper->value()), cv::Scalar(HMaxUpper->value(), SMaxUpper->value(), VMaxUpper->value()), threshold);
+
+		cv::Mat mask;
+		cv::addWeighted(thresholdFinal, 1.0, threshold, 1.0, 0.0, mask);
+
+		namedWindow("Color Threshold", CV_WINDOW_AUTOSIZE);
+		imshow("Color Threshold", mask);
+		cv::waitKey(0);
+
+		// Create a Gaussian & median Blur Filter
+		medianBlur(mask, mask, 5);
+		GaussianBlur(mask, mask, Size(9, 9), 2, 2);
+
+		// circle center
+		circle(mask, center[0], 3, (0, 100, 100), -1, 8, 0);
+		// circle outline
+		circle(mask, center[0], 14, Scalar(100, 100, 100), 3, 8, 0);
+
+		// Show Blur result
+		namedWindow("Blur", CV_WINDOW_AUTOSIZE);
+		imshow("Blur", mask);
+		cv::waitKey(0);
 	}
 }
 

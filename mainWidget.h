@@ -180,6 +180,8 @@ private:
 	
 	void startCalibration(bool checked);
 
+	void viewScene(bool checked);
+
 private: /*!< Private QT members. */
 	QAction                                         *aboutAct;
 	QAction                                         *quitAct;
@@ -224,6 +226,7 @@ private: /*!< Private VTK members. */
 	bool											isProbeVisible, isOculusVisible;
 
 	Matrix<double>									leftIntrinsicParam;
+	vector<double>									leftDistortionParam;
 	cv::Mat											thresholdFinal;
 	vector<Point2f>									poseCenters;
 	Matrix<double>									X;
