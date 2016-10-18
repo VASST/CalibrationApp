@@ -72,8 +72,10 @@ data in realtime, and updates the screen accordingly.
 #include "matrix.h"
 
 // OpenCV
-#include "opencv2/highgui/highgui.hpp"
-#include "opencv2/imgproc/imgproc.hpp"
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+
+// stl includes
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -89,157 +91,157 @@ class eccTrackerWidget;
 using namespace std;
 using namespace cv;
 
-class mainWidget : public QMainWindow {
-
-	Q_OBJECT
+class mainWidget : public QMainWindow
+{
+  Q_OBJECT
 
 public:
-	//! A constructor
-	mainWidget(QWidget *parent = 0);
+  //! A constructor
+  mainWidget(QWidget* parent = 0);
 
-	//! A destructor
-	~mainWidget();
-	void ovrvision();
+  //! A destructor
+  ~mainWidget();
+  void ovrvision();
 
 private: /*!< Private functions, QT related */
-	void createActions();
-	void createMenus();
-	void createStatusBar();
+  void createActions();
+  void createMenus();
+  void createStatusBar();
 
 private:
-	/*!
-	* Centralized place to create all vtk objects.
-	*/
-	void createVTKObjects();
+  /*!
+  * Centralized place to create all vtk objects.
+  */
+  void createVTKObjects();
 
-	/*!
-	* A centralized place to delete all vtk objects.
-	*/
-	void destroyVTKObjects();
+  /*!
+  * A centralized place to delete all vtk objects.
+  */
+  void destroyVTKObjects();
 
-	/*!
-	* Centralized place to setup all vtk pipelines.
-	*/
-	void setupVTKPipeline();
+  /*!
+  * Centralized place to setup all vtk pipelines.
+  */
+  void setupVTKPipeline();
 
-	/*!
-	* Check the vtkTrackerTool flags to determine
-	* what tools are connected.
-	*/
-	void checkToolPorts();
+  /*!
+  * Check the vtkTrackerTool flags to determine
+  * what tools are connected.
+  */
+  void checkToolPorts();
 
-	private slots: /*! VTK-related slots */
-	void updateTrackerInfo();
-	void startTrackerSlot(bool);
+private slots: /*! VTK-related slots */
+  void updateTrackerInfo();
+  void startTrackerSlot(bool);
 
-	private slots:
-	/*!
-	* A QT slot for display information about this application
-	*/
-	void about();
+private slots:
+  /*!
+  * A QT slot for display information about this application
+  */
+  void about();
 
-	/*!
-	* A QT slot for display information about Robarts
-	*/
-	void aboutRobarts();
+  /*!
+  * A QT slot for display information about Robarts
+  */
+  void aboutRobarts();
 
-	/*!
-	* Create a dock window for controlling NDI tracker
-	*/
-	void createControlDock();
+  /*!
+  * Create a dock window for controlling NDI tracker
+  */
+  void createControlDock();
 
-	/*!
-	* Update the information from the ovrvision camera
-	*/
-	void ovrvisionUpdate();
-	
-	/*!
-	* Create a dock window for the tracked tools information
-	*/
-	void createToolInformation();
+  /*!
+  * Update the information from the ovrvision camera
+  */
+  void ovrvisionUpdate();
 
-	/*!
-	* Get transform information from tracking device
-	*/
-	void getTransform();
+  /*!
+  * Create a dock window for the tracked tools information
+  */
+  void createToolInformation();
 
-	
-	/*!
-	* Pivot calibration routine
-	*/
-	void pivotCalibration(bool checked);
+  /*!
+  * Get transform information from tracking device
+  */
+  void getTransform();
 
-	/*!
-	* Grab x,y cordinates in image when called
-	*/
-	static void onMouse(int event, int x, int y, int, void* userdata);
 
-	void nextPose(bool checked);
+  /*!
+  * Pivot calibration routine
+  */
+  void pivotCalibration(bool checked);
 
-	void manualSelection(bool checked);
-	
-	void startCalibration(bool checked);
+  /*!
+  * Grab x,y cordinates in image when called
+  */
+  static void onMouse(int event, int x, int y, int, void* userdata);
 
-	void viewScene(bool checked);
+  void nextPose(bool checked);
+
+  void manualSelection(bool checked);
+
+  void startCalibration(bool checked);
+
+  void viewScene(bool checked);
 
 private: /*!< Private QT members. */
-	QAction                                         *aboutAct;
-	QAction                                         *quitAct;
-	QAction                                         *aboutRobartsAct;
-	QAction                                         *controlAct;
-	QPushButton                                     *trackerButton;
-	QTimer                                          *trackerTimer;
-	QTimer                                          *ovrvisionTimer;
-	QMenu                                           *fileMenu;
-	QMenu                                           *helpMenu;
-	QMenu                                           *calibMenu;
-	QMenu                                           *controlMenu;
-	QDockWidget                                     *controlDock;
-	QTimer											*mTimer;
-	QDockWidget										*toolInfo;
-	QTableWidget									*dataTable;
-	QSpinBox										*HMinLower;
-	QSpinBox										*HMaxLower;
-	QSpinBox										*SMinLower;
-	QSpinBox										*VMinLower;
-	QSpinBox										*VMaxLower;
-	QSpinBox										*SMaxLower;
-	QSpinBox										*HMinUpper;
-	QSpinBox										*HMaxUpper;
-	QSpinBox										*SMinUpper;
-	QSpinBox										*VMinUpper;
-	QSpinBox										*VMaxUpper;
-	QSpinBox										*SMaxUpper;
-	QLineEdit										*stylusTipRMS;
+  QAction*                                         aboutAct;
+  QAction*                                         quitAct;
+  QAction*                                         aboutRobartsAct;
+  QAction*                                         controlAct;
+  QPushButton*                                     trackerButton;
+  QTimer*                                          trackerTimer;
+  QTimer*                                          ovrvisionTimer;
+  QMenu*                                           fileMenu;
+  QMenu*                                           helpMenu;
+  QMenu*                                           calibMenu;
+  QMenu*                                           controlMenu;
+  QDockWidget*                                     controlDock;
+  QTimer*                      mTimer;
+  QDockWidget*                   toolInfo;
+  QTableWidget*                  dataTable;
+  QSpinBox*                    HMinLower;
+  QSpinBox*                    HMaxLower;
+  QSpinBox*                    SMinLower;
+  QSpinBox*                    VMinLower;
+  QSpinBox*                    VMaxLower;
+  QSpinBox*                    SMaxLower;
+  QSpinBox*                    HMinUpper;
+  QSpinBox*                    HMaxUpper;
+  QSpinBox*                    SMinUpper;
+  QSpinBox*                    VMinUpper;
+  QSpinBox*                    VMaxUpper;
+  QSpinBox*                    SMaxUpper;
+  QLineEdit*                   stylusTipRMS;
 
 private: /*!< Private VTK members. */
-	QVTKWidget                                      *qvtk;
-	std::vector< QLightWidget *>                    lightWidgets;
-	vtkSmartPointer< vtkRenderer >                  ren;
+  QVTKWidget*                                      qvtk;
+  std::vector< QLightWidget*>                    lightWidgets;
+  vtkSmartPointer< vtkRenderer >                  ren;
 
-	/*!
-	* Tracker related objects.
-	*/
-	vtkSmartPointer< vtkNDITracker >                myTracker;
-	vtkSmartPointer< vtkTrackerTool >               oculusHMD;
-	vtkSmartPointer< vtkTrackerTool >               referenceCoil;
-	bool											isProbeVisible, isOculusVisible;
+  /*!
+  * Tracker related objects.
+  */
+  vtkSmartPointer< vtkNDITracker >                myTracker;
+  vtkSmartPointer< vtkTrackerTool >               oculusHMD;
+  vtkSmartPointer< vtkTrackerTool >               referenceCoil;
+  bool                      isProbeVisible, isOculusVisible;
 
-	Matrix<double>									leftIntrinsicParam;
-	vector<double>									leftDistortionParam;
-	cv::Mat											thresholdFinal;
-	vector<Point2f>									poseCenters;
-	Matrix<double>									X;
-	Matrix<double>									origin;
-	Matrix<double>									dNormalized;
+  Matrix<double>                  leftIntrinsicParam;
+  vector<double>                  leftDistortionParam;
+  cv::Mat                     thresholdFinal;
+  vector<Point2f>                 poseCenters;
+  Matrix<double>                  X;
+  Matrix<double>                  origin;
+  Matrix<double>                  dNormalized;
 
 private:
-	eccTrackerWidget                                *trackerWidget;
+  eccTrackerWidget*                                trackerWidget;
 
 private: /*!< Misc variables */
-	bool                                            isTrackerInit;
+  bool                                            isTrackerInit;
 
-	int qLightOrder[4];
+  int qLightOrder[4];
 };
 
 #endif // of __MAINWIDGET_H__

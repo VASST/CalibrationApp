@@ -1,23 +1,23 @@
-#include <I:/d/VTK/ThirdParty/glew/vtkglew/include/GL/glew.h>
-// Main app file
-#include "mainWidget.h"
-
 // VTK
-#include <vtkSmartPointer.h>
+#include <vtk_glew.h>
+#include <vtkImageActor.h>
+#include <vtkImageData.h>
+#include <vtkImageImport.h>
+#include <vtkImageMapper.h>
+#include <vtkInteractorStyleImage.h>
+#include <vtkPNGWriter.h>
+#include <vtkPlaneSource.h>
+#include <vtkPolyData.h>
+#include <vtkPolyDataMapper.h>
 #include <vtkRenderWindow.h>
 #include <vtkRenderWindowInteractor.h>
 #include <vtkRenderer.h>
+#include <vtkSmartPointer.h>
 #include <vtkTexture.h>
-#include <vtkImageImport.h>
-#include <vtkImageMapper.h>
-#include <vtkImageActor.h>
-#include <vtkImageData.h>
-#include <vtkInteractorStyleImage.h>
-#include <vtkPNGWriter.h>
-#include <vtkPolyDataMapper.h>
-#include <vtkPolyData.h>
 #include <vtkTextureMapToPlane.h>
-#include <vtkPlaneSource.h>
+
+// Main app file
+#include "mainWidget.h"
 
 // VTK OpenVR
 #include <vtkOpenVRCamera.h>
@@ -25,26 +25,27 @@
 #include <vtkOpenVRRenderWindow.h>
 #include <vtkOpenVRRenderWindowInteractor.h>
 
+// OvrvisionPro includes
 #include <ovrvision_pro.h>
-#include <../src/lib_src/ovrvision_setting.h>
+#include <ovrvision_setting.h>
 
 // OpenCV
-#include <opencv2/opencv.hpp>
 #include <cv.h>
 #include <highgui.h>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
 #include <stdio.h>
 
 #include <QApplication>
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
-	QApplication app(argc, argv);
-	app.setOrganizationName("Robarts Research Institute, Canada");
-	app.setApplicationName("Phantom-Less Calibration");
+  QApplication app(argc, argv);
+  app.setOrganizationName("Robarts Research Institute, Canada");
+  app.setApplicationName("Phantom-Less Calibration");
 
-	mainWidget mainWin;
-	mainWin.show();
-	return app.exec();
+  mainWidget mainWin;
+  mainWin.show();
+  return app.exec();
 }
 
