@@ -36,5 +36,6 @@ public:
   QPushButton                                     *calibrationButton;
   QPushButton                                     *nextPoseButton;
   QPushButton                                     *manualButton;
+  QPushButton                                     *viewSceneButton;
   };
 #endif //  __TRACKERWIDGET_H__

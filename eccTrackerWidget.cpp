@@ -33,6 +33,11 @@ eccTrackerWidget::eccTrackerWidget( QWidget *parent )
   manualButton->setText("Manual Selection");
   vbox->addWidget(manualButton);
 
+  viewSceneButton = new QPushButton;
+  viewSceneButton->setCheckable(true);
+  viewSceneButton->setText("View Scene");
+  vbox->addWidget(viewSceneButton);
+
   QHBoxLayout *hbox = new QHBoxLayout;
 
   QLabel *label = new QLabel;

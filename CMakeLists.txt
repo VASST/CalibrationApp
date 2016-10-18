@@ -97,4 +97,6 @@ TARGET_LINK_LIBRARIES( VRApp
   vtksys
   vtkRenderingGL2PS${VTK_RENDERING_BACKEND}
   ${OpenCV_LIBS}
+  I:/d/OpenVR/SDL2-Build/Debug/SDL2main.lib
+I:/d/OpenVR/SDL2-Build/Debug/SDL2.lib
 )
