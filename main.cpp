@@ -39,6 +39,8 @@
 
 int main(int argc, char *argv[])
 {
+	CoInitialize(nullptr);
+
 	QApplication app(argc, argv);
 	app.setOrganizationName("Robarts Research Institute, Canada");
 	app.setApplicationName("Phantom-Less Calibration");

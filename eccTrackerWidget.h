@@ -37,5 +37,7 @@ public:
   QPushButton                                     *nextPoseButton;
   QPushButton                                     *manualButton;
   QPushButton                                     *viewSceneButton;
+  QPushButton									  *collectPoses;
+  QPushButton									  *projectionError;
   };
 #endif //  __TRACKERWIDGET_H__

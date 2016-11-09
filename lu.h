@@ -81,204 +81,208 @@ POSSIBILITY OF SUCH DAMAGES.
 // this function returns -1 is factorization is unsuccessful.
 //
 
+namespace echen
+{
+
 #define TINY 1.0e-20
 
 
-template<class MAT, class VEC>
-int ludcmp(MAT &a, VEC &indx)
-{
-	int output = 1; // no row interchanges yet.
-	Subscript i, j, k, imax = 0;
+	template<class MAT, class VEC>
+	int ludcmp(MAT &a, VEC &indx)
+	{
+		int output = 1; // no row interchanges yet.
+		Subscript i, j, k, imax = 0;
 
-	Subscript X = a.num_rows();
-	Subscript Y = a.num_cols();
+		Subscript X = a.num_rows();
+		Subscript Y = a.num_cols();
 
-	if ((X == 0) || (Y == 0)) return -1;
+		if ((X == 0) || (Y == 0)) return -1;
 
-	// the codes in Numerical Recipes only works for square matrix  
-	if (X != Y) return -1;
+		// the codes in Numerical Recipes only works for square matrix  
+		if (X != Y) return -1;
 
-	if (indx.dim() != X) indx.newsize(X); // need to make sure the piviting
-										  // matrix is the same size
+		if (indx.dim() != X) indx.newsize(X); // need to make sure the piviting
+											  // matrix is the same size
 
-	typename MAT::element_type big, temp, sum, dum;
+		typename MAT::element_type big, temp, sum, dum;
 
-	Vec<double> vv(X);
-	// vv stores the implicit scaling of each row
+		Vec<double> vv(X);
+		// vv stores the implicit scaling of each row
 
-	for (i = 1; i <= X; i++) {
-		// loop over rows to get the implicit scaling information
+		for (i = 1; i <= X; i++) {
+			// loop over rows to get the implicit scaling information
 
-		big = 0.0;
-		for (j = 1; j <= X; j++)
-			if ((temp = fabs(a(i, j))) > big) big = temp;
+			big = 0.0;
+			for (j = 1; j <= X; j++)
+				if ((temp = fabs(a(i, j))) > big) big = temp;
 
-		if (big == 0.0) return -1; // singular matrix
+			if (big == 0.0) return -1; // singular matrix
 
-		vv(i) = 1.0 / big; // save the scaling
-	}
-
-
-	// This is the loop over columns of Crout's method
-	for (j = 1; j <= X; j++) {
-		for (i = 1; i < j; i++) {
-			sum = a(i, j);
-
-			for (k = 1; k < i; k++) sum -= a(i, k) * a(k, j);
-
-			a(i, j) = sum;
+			vv(i) = 1.0 / big; // save the scaling
 		}
 
-		big = 0.0; // Initialize for the search for largest pivot element
-		for (i = j; i <= X; i++) {
-			sum = a(i, j);
 
-			for (k = 1; k < j; k++)
-				sum -= a(i, k) * a(k, j);
+		// This is the loop over columns of Crout's method
+		for (j = 1; j <= X; j++) {
+			for (i = 1; i < j; i++) {
+				sum = a(i, j);
 
-			a(i, j) = sum;
+				for (k = 1; k < i; k++) sum -= a(i, k) * a(k, j);
 
-			if ((dum = vv(i) * fabs(sum)) >= big) {
-				// is the figure of merit for the pivot better than the best so far?
-				big = dum;
-				imax = i;
-			}
-		}
-
-		if (j != imax) {
-			// Do we need to interchange rows?
-
-			for (k = 1; k <= X; k++) { // Yes, we do
-				dum = a(imax, k);
-				a(imax, k) = a(j, k);
-				a(j, k) = dum;
+				a(i, j) = sum;
 			}
 
-			output = -(output); // change the parity of output
+			big = 0.0; // Initialize for the search for largest pivot element
+			for (i = j; i <= X; i++) {
+				sum = a(i, j);
 
-			vv(imax) = vv(j); // interchange the scale factor.
+				for (k = 1; k < j; k++)
+					sum -= a(i, k) * a(k, j);
+
+				a(i, j) = sum;
+
+				if ((dum = vv(i) * fabs(sum)) >= big) {
+					// is the figure of merit for the pivot better than the best so far?
+					big = dum;
+					imax = i;
+				}
+			}
+
+			if (j != imax) {
+				// Do we need to interchange rows?
+
+				for (k = 1; k <= X; k++) { // Yes, we do
+					dum = a(imax, k);
+					a(imax, k) = a(j, k);
+					a(j, k) = dum;
+				}
+
+				output = -(output); // change the parity of output
+
+				vv(imax) = vv(j); // interchange the scale factor.
+			}
+
+
+			indx(j) = imax;
+
+			if (a(j, j) == 0.0) a(j, j) = TINY;
+
+			// if the pivot element is zero the matrix is singular
+			// (at least to the prevision of the algorithm).  For
+			// some applications on singular matrices, it is desirable
+			// to substitute TINY for zero
+
+			if (j != X) {
+				// Now, finally, divide by the pivot element
+				dum = (1.0) / (a(j, j));
+				for (i = (j + 1); i <= X; i++) a(i, j) *= dum;
+			}
+		} // go back for the next column in the reduction
+
+		return output;
+	}
+
+
+	template<class MAT, class VEC, class VECS>
+	int lubksb(const MAT &a, const VECS &indx, VEC &b)
+	{
+		//
+		// NOTE:  TNT and Numerical Recipes are actually the same in there...
+		//  
+		Subscript i, ii = 0, ip, j;
+		Subscript n = b.dim();
+
+		typename MAT::element_type sum = 0.0;
+
+
+		for (i = 1; i <= n; i++) {
+			// When ii is set to positive value, it will become the
+			// index of the first nonvanishing element of b.
+			//  We now do the forward substitutio.  The only new
+			// wrinkle is to unscramble the permutation as we go.
+
+			ip = indx(i);
+			sum = b(ip);
+			b(ip) = b(i);
+
+			if (ii)
+				for (j = ii; j <= (i - 1); j++) sum -= a(i, j)*b(j);
+
+			else if (sum) ii = i;    // a nonzero element was encountered,
+									 // so from now on we will have to do
+									 // the sums in the loop above
+
+			b(i) = sum;
+		}
+		// cout << endl;
+
+		for (i = n; i >= 1; i--) {
+
+			// When ii is set to positive value, it will become the
+			// index of the first nonvanishing element of b.
+			//  We now do the forward substitutio.  The only new
+			// wrinkle is to unscramble the permutation as we go.
+
+			sum = b(i);
+
+			for (j = i + 1; j <= n; j++) sum -= a(i, j)*b(j);
+
+			b(i) = sum / a(i, i); // store a component of solution vector X
 		}
 
+		// all done!
+		return 0;
 
-		indx(j) = imax;
+	}
 
-		if (a(j, j) == 0.0) a(j, j) = TINY;
 
-		// if the pivot element is zero the matrix is singular
-		// (at least to the prevision of the algorithm).  For
-		// some applications on singular matrices, it is desirable
-		// to substitute TINY for zero
+	template< class T >
+	Matrix<T> lu_inverse(const Matrix<T> &A)
+	{
+		Subscript X = A.num_rows();
+		Subscript Y = A.num_cols();
+		Subscript i, j;
 
-		if (j != X) {
-			// Now, finally, divide by the pivot element
-			dum = (1.0) / (a(j, j));
-			for (i = (j + 1); i <= X; i++) a(i, j) *= dum;
+		assert(X == Y);
+
+		Matrix<T> out(X, Y);
+		Matrix<T> tmp(A);  // we don't want to destroy A
+
+		Vec<Subscript> indx(X);
+		Vec<T> col(X);
+
+		ludcmp(tmp, indx);
+
+		for (j = 1; j <= X; j++) {
+			for (i = 1; i <= X; i++) col(i) = 0.0;
+			col(j) = 1.0;
+
+			lubksb(tmp, indx, col);
+
+			for (i = 1; i <= X; i++) out(i, j) = col(i);
 		}
-	} // go back for the next column in the reduction
 
-	return output;
-}
-
-
-template<class MAT, class VEC, class VECS>
-int lubksb(const MAT &a, const VECS &indx, VEC &b)
-{
-	//
-	// NOTE:  TNT and Numerical Recipes are actually the same in there...
-	//  
-	Subscript i, ii = 0, ip, j;
-	Subscript n = b.dim();
-
-	typename MAT::element_type sum = 0.0;
-
-
-	for (i = 1; i <= n; i++) {
-		// When ii is set to positive value, it will become the
-		// index of the first nonvanishing element of b.
-		//  We now do the forward substitutio.  The only new
-		// wrinkle is to unscramble the permutation as we go.
-
-		ip = indx(i);
-		sum = b(ip);
-		b(ip) = b(i);
-
-		if (ii)
-			for (j = ii; j <= (i - 1); j++) sum -= a(i, j)*b(j);
-
-		else if (sum) ii = i;    // a nonzero element was encountered,
-								 // so from now on we will have to do
-								 // the sums in the loop above
-
-		b(i) = sum;
-	}
-	// cout << endl;
-
-	for (i = n; i >= 1; i--) {
-
-		// When ii is set to positive value, it will become the
-		// index of the first nonvanishing element of b.
-		//  We now do the forward substitutio.  The only new
-		// wrinkle is to unscramble the permutation as we go.
-
-		sum = b(i);
-
-		for (j = i + 1; j <= n; j++) sum -= a(i, j)*b(j);
-
-		b(i) = sum / a(i, i); // store a component of solution vector X
+		return (out);
 	}
 
-	// all done!
-	return 0;
+	template< class T >
+	double lu_determinant(const Matrix<T> &A)
+	{
+		Subscript X = A.num_rows();
+		Subscript Y = A.num_cols();
+		Subscript j;
 
-}
+		assert(X == Y);
 
+		Matrix<T> tmp(A); // we don't want to destroy A
+		Vec<Subscript> indx(X);
 
-template< class T >
-Matrix<T> lu_inverse(const Matrix<T> &A)
-{
-	Subscript X = A.num_rows();
-	Subscript Y = A.num_cols();
-	Subscript i, j;
+		double d = (double)ludcmp(tmp, indx);
 
-	assert(X == Y);
+		for (j = 1; j <= X; j++) d *= (double)tmp(j, j);
 
-	Matrix<T> out(X, Y);
-	Matrix<T> tmp(A);  // we don't want to destroy A
-
-	Vec<Subscript> indx(X);
-	Vec<T> col(X);
-
-	ludcmp(tmp, indx);
-
-	for (j = 1; j <= X; j++) {
-		for (i = 1; i <= X; i++) col(i) = 0.0;
-		col(j) = 1.0;
-
-		lubksb(tmp, indx, col);
-
-		for (i = 1; i <= X; i++) out(i, j) = col(i);
+		return d;
 	}
-
-	return (out);
-}
-
-template< class T >
-double lu_determinant(const Matrix<T> &A)
-{
-	Subscript X = A.num_rows();
-	Subscript Y = A.num_cols();
-	Subscript j;
-
-	assert(X == Y);
-
-	Matrix<T> tmp(A); // we don't want to destroy A
-	Vec<Subscript> indx(X);
-
-	double d = (double)ludcmp(tmp, indx);
-
-	for (j = 1; j <= X; j++) d *= (double)tmp(j, j);
-
-	return d;
 }
 
 #endif // of __LU_H__

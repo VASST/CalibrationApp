@@ -44,7 +44,6 @@ POSSIBILITY OF SUCH DAMAGES.
 
 =========================================================================*/
 
-
 #ifndef __MATHUTILS_H__
 #define __MATHUTILS_H__
 
@@ -57,127 +56,129 @@ POSSIBILITY OF SUCH DAMAGES.
 //#include "svd.h"
 #include "lu.h"
 
-/*!
-* compute the matrix Frobenius Norm
-*/
-double matFrobeniusNorm(Matrix<double> &M);
+namespace echen
+{
+	/*!
+	* compute the matrix Frobenius Norm
+	*/
+	double matFrobeniusNorm(Matrix<double> &M);
 
-/*!
-* point to line registration
-*/
-void p2l(Matrix<double> &X, Matrix<double> &O, Matrix<double> &D, double tol,
-	Matrix<double> &R, Matrix<double> &t, double &err);
+	/*!
+	* point to line registration
+	*/
+	void p2l(Matrix<double> &X, Matrix<double> &O, Matrix<double> &D, double tol,
+		Matrix<double> &R, Matrix<double> &t, double &err);
 
-/*!
-* compute the distance between a point (p)
-* and a line (a+t*n)
-*
-* assume colume vector
-*/
-double point2lineDistance(Matrix<double> &p, Matrix<double> &a, Matrix<double> &n);
+	/*!
+	* compute the distance between a point (p)
+	* and a line (a+t*n)
+	*
+	* assume colume vector
+	*/
+	double point2lineDistance(Matrix<double> &p, Matrix<double> &a, Matrix<double> &n);
 
-/*!
-* compute the determinant of a 3x3 matrix directly
-*/
-double detm3x3(Matrix<double> &M);
+	/*!
+	* compute the determinant of a 3x3 matrix directly
+	*/
+	double detm3x3(Matrix<double> &M);
 
-/*!
-* compute the inverse of a 3x3 matrix, explicitely by hard-coding
-*/
-void invm3x3(Matrix<double> &M, Matrix<double> &outM);
+	/*!
+	* compute the inverse of a 3x3 matrix, explicitely by hard-coding
+	*/
+	void invm3x3(Matrix<double> &M, Matrix<double> &outM);
 
-/*!
-* compute the common line intersection amoung n lines
-*
-* least-square solution, works for any dimension
-*/
-void linesIntersection(Matrix<double> &a, // 3xn line origin
-	Matrix<double> &N, // 3xn line direction
-	Matrix<double> &p, // mx1 point 
-	double &err);     // FRE
+	/*!
+	* compute the common line intersection amoung n lines
+	*
+	* least-square solution, works for any dimension
+	*/
+	void linesIntersection(Matrix<double> &a, // 3xn line origin
+		Matrix<double> &N, // 3xn line direction
+		Matrix<double> &p, // mx1 point 
+		double &err);     // FRE
 
-					  /*!
-					  * least-square solution for rigid Orthogonal Procrustes Analysis
-					  */
-void OPA_rigid(Matrix<double> &X, Matrix<double> &Y,
-	Matrix<double> &R, Matrix<double> &t);
+						  /*!
+						  * least-square solution for rigid Orthogonal Procrustes Analysis
+						  */
+	void OPA_rigid(Matrix<double> &X, Matrix<double> &Y,
+		Matrix<double> &R, Matrix<double> &t);
 
-// matrix utilities
+	// matrix utilities
 
-// append columns to the end of a matrix
-void matAppend(Matrix<double> &M, Matrix<double> &v);
+	// append columns to the end of a matrix
+	void matAppend(Matrix<double> &M, Matrix<double> &v);
 
-// quaternion related
+	// quaternion related
 
-/*!
-* convert an axis-angle [aw ax ay az]' representation
-* to a quaternion [qx qy qz qw]'
-*/
-void aa2q(Matrix<double> &aa, Matrix<double> &q);
+	/*!
+	* convert an axis-angle [aw ax ay az]' representation
+	* to a quaternion [qx qy qz qw]'
+	*/
+	void aa2q(Matrix<double> &aa, Matrix<double> &q);
 
-/*!
-* convert a quaternion to axis-angle representation
-*/
-void q2aa(Matrix<double> &q, Matrix<double> &aa);
+	/*!
+	* convert a quaternion to axis-angle representation
+	*/
+	void q2aa(Matrix<double> &q, Matrix<double> &aa);
 
-/*!
-* normalize a quaternion
-*/
-void qnorm(Matrix<double> &q);
+	/*!
+	* normalize a quaternion
+	*/
+	void qnorm(Matrix<double> &q);
 
-/*!
-* compute an "average" quaternion
-*/
-void qavg(Matrix<double> &qin, Matrix<double> &qout);
+	/*!
+	* compute an "average" quaternion
+	*/
+	void qavg(Matrix<double> &qin, Matrix<double> &qout);
 
-/*!
-* compute the average transformation [qx qy qz qw tx ty tz]'
-*/
-void q7avg(Matrix<double> &qin, Matrix<double> &qout);
+	/*!
+	* compute the average transformation [qx qy qz qw tx ty tz]'
+	*/
+	void q7avg(Matrix<double> &qin, Matrix<double> &qout);
 
 
-// cross product
-void cross(Matrix<double> &a, Matrix<double> &b, Matrix<double> &c);
+	// cross product
+	void cross(Matrix<double> &a, Matrix<double> &b, Matrix<double> &c);
 
-// dot product, assuming a and b are column vectors
-double dot(Matrix<double> &a, Matrix<double> &b);
+	// dot product, assuming a and b are column vectors
+	double dot(Matrix<double> &a, Matrix<double> &b);
 
-// rotation matrix from quaternion
-// A = MQ(q) returns the 3x3 rotation matrix defined by the quaternion q
-// A is applied to the column vectors
-Matrix<double> mq(Matrix<double> &q);
-Matrix<double> amq(Matrix<double> &q);
+	// rotation matrix from quaternion
+	// A = MQ(q) returns the 3x3 rotation matrix defined by the quaternion q
+	// A is applied to the column vectors
+	Matrix<double> mq(Matrix<double> &q);
+	Matrix<double> amq(Matrix<double> &q);
 
-// pseudoinverse using svd
-Matrix<double> pinv(Matrix<double> & a);
+	// pseudoinverse using svd
+	Matrix<double> pinv(Matrix<double> & a);
 
-double linetre(Matrix<double> &P,
-	Matrix<double> &N,
-	std::vector< Matrix<double> > &S,
-	Matrix<double> &tar);
+	double linetre(Matrix<double> &P,
+		Matrix<double> &N,
+		std::vector< Matrix<double> > &S,
+		Matrix<double> &tar);
 
-void stiffnesses(Matrix<double> &K, // 6x6 input
-	Matrix<double> &tar, // 3x1 input
-	Matrix<double> &sigma,
-	Matrix<double> &mu,
-	Matrix<double> &mueq);
+	void stiffnesses(Matrix<double> &K, // 6x6 input
+		Matrix<double> &tar, // 3x1 input
+		Matrix<double> &sigma,
+		Matrix<double> &mu,
+		Matrix<double> &mueq);
 
-void kline(Matrix<double> &P,                 // 3xn input
-	Matrix<double> &N,                  // 3xn input
-	std::vector < Matrix<double> > &S,  // 3x3xn input
-	Matrix<double> &K,                  // 6x6 output
-	Matrix<double> &A,                  // 3x3 output
-	Matrix<double> &B,                  // 3x3 output
-	Matrix<double> &C                   // 3x3 output
-);
+	void kline(Matrix<double> &P,                 // 3xn input
+		Matrix<double> &N,                  // 3xn input
+		std::vector < Matrix<double> > &S,  // 3x3xn input
+		Matrix<double> &K,                  // 6x6 output
+		Matrix<double> &A,                  // 3x3 output
+		Matrix<double> &B,                  // 3x3 output
+		Matrix<double> &C                   // 3x3 output
+	);
 
-void anisofstiff3(Matrix<double> &P,                 // 3xn input
-	std::vector < Matrix<double> > &S,  // 3x3xn input
-	Matrix<double> &K,                  // 6x6 output
-	Matrix<double> &A,                  // 3x3 output
-	Matrix<double> &B,                  // 3x3 output
-	Matrix<double> &D                   // 3x3 output
-);
-
+	void anisofstiff3(Matrix<double> &P,                 // 3xn input
+		std::vector < Matrix<double> > &S,  // 3x3xn input
+		Matrix<double> &K,                  // 6x6 output
+		Matrix<double> &A,                  // 3x3 output
+		Matrix<double> &B,                  // 3x3 output
+		Matrix<double> &D                   // 3x3 output
+	);
+}
 
 #endif // of MATHUTILS_H__

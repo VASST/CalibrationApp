@@ -7,6 +7,9 @@ IF ( COMMAND CMAKE_POLICY )
 ENDIF( COMMAND CMAKE_POLICY )
 
 FIND_PACKAGE( Qt5 REQUIRED COMPONENTS Widgets OpenGL Core Gui )
+SET(CMAKE_AUTOMOC ON)
+SET(CMAKE_AUTOUIC ON)
+SET(CMAKE_AUTORCC ON)
 
 FIND_PACKAGE( OpenCV REQUIRED )
 FIND_PACKAGE( vtk REQUIRED )
@@ -26,12 +29,6 @@ SET( OvrvisionPro_SOURCES
 SET( OvrvisionPro_HEADERS
   I:/d/PlusBuild-bin/Deps/OvrvisionPro/OvrvisionPro/src/lib_src/ovrvision_setting.h
   )
-					
-QT5_WRAP_CPP( mocHDR 
-  mainWidget.h
-  qlightwidget.h
-  eccTrackerWidget.h
-  )
 
 ADD_EXECUTABLE( VRApp
   main.cpp
@@ -47,7 +44,6 @@ ADD_EXECUTABLE( VRApp
   mathUtils.h
   matrix.h
   svd.h
-  ${mocHDR}
   ${OvrvisionPro_HEADERS}
   ${OvrvisionPro_SOURCES}
 )
@@ -98,5 +94,5 @@ TARGET_LINK_LIBRARIES( VRApp
   vtkRenderingGL2PS${VTK_RENDERING_BACKEND}
   ${OpenCV_LIBS}
   I:/d/OpenVR/SDL2-Build/Debug/SDL2main.lib
-I:/d/OpenVR/SDL2-Build/Debug/SDL2.lib
+  I:/d/OpenVR/SDL2-Build/Debug/SDL2.lib
 )

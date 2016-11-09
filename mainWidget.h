@@ -52,7 +52,7 @@ data in realtime, and updates the screen accordingly.
 */
 #ifndef __MAINWIDGET_H__
 #define __MAINWIDGET_H__
-
+#include <I:/d/VTK/ThirdParty/glew/vtkglew/include/GL/glew.h>
 // C++ includes
 #include <vector>
 #include <fstream>
@@ -64,6 +64,8 @@ data in realtime, and updates the screen accordingly.
 
 // VTK includes
 #include <vtkSmartPointer.h>
+#include <vtkMatrix4x4.h>
+#include <vtkActor.h>
 
 // local includes
 #include "qmainwindow.h"
@@ -74,15 +76,24 @@ data in realtime, and updates the screen accordingly.
 // OpenCV
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
+#include "I:/d/opencv/sources/modules/cudev/include/opencv2/cudev/ptr2d/detail/gpumat.hpp"
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <vtkOpenVRRenderWindow.h>
+#include <vtkOpenVRRenderer.h>
+#include <vtkOpenVRCamera.h>
+
+// Ovrvision includes
+#include <ovrvision_pro.h>
 
 // VTK forward declaration
 class QVTKWidget;
 class vtkRenderer;
 class vtkNDITracker;
 class vtkTrackerTool;
+class vtkTexture;
+class vtkImageImport;
 
 // local forward declaration
 class eccTrackerWidget;
@@ -99,7 +110,6 @@ public:
 
 	//! A destructor
 	~mainWidget();
-	void ovrvision();
 
 private: /*!< Private functions, QT related */
 	void createActions();
@@ -128,11 +138,13 @@ private:
 	*/
 	void checkToolPorts();
 
-	private slots: /*! VTK-related slots */
+	void setupARRendering();
+
+private slots: /*! VTK-related slots */
 	void updateTrackerInfo();
 	void startTrackerSlot(bool);
 
-	private slots:
+private slots:
 	/*!
 	* A QT slot for display information about this application
 	*/
@@ -152,7 +164,7 @@ private:
 	* Update the information from the ovrvision camera
 	*/
 	void ovrvisionUpdate();
-	
+
 	/*!
 	* Create a dock window for the tracked tools information
 	*/
@@ -163,24 +175,43 @@ private:
 	*/
 	void getTransform();
 
-	
+
 	/*!
 	* Pivot calibration routine
 	*/
 	void pivotCalibration(bool checked);
 
 	/*!
-	* Grab x,y cordinates in image when called
+	* Grab x,y coordinates in image when called
 	*/
 	static void onMouse(int event, int x, int y, int, void* userdata);
 
+	/*!
+	* Grabs the next pose for calibration
+	*/
 	void nextPose(bool checked);
 
+	/*!
+	* Allows user to manually select the point if previous circle detection was wrong
+	*/
 	void manualSelection(bool checked);
-	
+
+	/*!
+	* Start hand-eye calibration
+	*/
 	void startCalibration(bool checked);
 
-	void viewScene(bool checked);
+	/*! 
+	* Save the image and 4x4 matrix of tracked camera
+	*/
+	void collectPose();
+
+	/*!
+	* Use to evaluate the projection error between different
+	* hand-eye calibrations. This must be updated before use
+	* with specific camera calibrations
+	*/
+	void calculateProjectionError();
 
 private: /*!< Private QT members. */
 	QAction                                         *aboutAct;
@@ -211,11 +242,13 @@ private: /*!< Private QT members. */
 	QSpinBox										*VMaxUpper;
 	QSpinBox										*SMaxUpper;
 	QLineEdit										*stylusTipRMS;
+	QTimer											*uiUpdateTimer;
 
 private: /*!< Private VTK members. */
 	QVTKWidget                                      *qvtk;
 	std::vector< QLightWidget *>                    lightWidgets;
-	vtkSmartPointer< vtkRenderer >                  ren;
+	vtkSmartPointer< vtkOpenVRRenderer >            ren = vtkSmartPointer<vtkOpenVRRenderer>::New();
+	vtkSmartPointer<vtkOpenVRCamera>				vrCamera = vtkSmartPointer<vtkOpenVRCamera>::New();
 
 	/*!
 	* Tracker related objects.
@@ -223,15 +256,44 @@ private: /*!< Private VTK members. */
 	vtkSmartPointer< vtkNDITracker >                myTracker;
 	vtkSmartPointer< vtkTrackerTool >               oculusHMD;
 	vtkSmartPointer< vtkTrackerTool >               referenceCoil;
+	vtkSmartPointer< vtkTrackerTool >				phantomTool;
+
 	bool											isProbeVisible, isOculusVisible;
 
-	Matrix<double>									leftIntrinsicParam;
+	echen::Matrix<double>							leftIntrinsicParam;
 	vector<double>									leftDistortionParam;
 	cv::Mat											thresholdFinal;
 	vector<Point2f>									poseCenters;
-	Matrix<double>									X;
-	Matrix<double>									origin;
-	Matrix<double>									dNormalized;
+	echen::Matrix<double>							X;
+	echen::Matrix<double>							origin;
+	echen::Matrix<double>							dNormalized;
+
+	vtkSmartPointer<vtkTexture>						textureLeft = vtkSmartPointer<vtkTexture>::New();
+	vtkSmartPointer<vtkTexture>						textureRight = vtkSmartPointer<vtkTexture>::New();
+	vtkSmartPointer<vtkImageImport>					imageImportLeft = vtkSmartPointer<vtkImageImport>::New();
+	vtkSmartPointer<vtkImageImport>					imageImportRight = vtkSmartPointer<vtkImageImport>::New();
+	vtkSmartPointer<vtkMatrix4x4>					point2Line = vtkSmartPointer<vtkMatrix4x4>::New();
+	vtkSmartPointer<vtkMatrix4x4>					tempP2L = vtkSmartPointer<vtkMatrix4x4>::New();
+	vtkSmartPointer<vtkActor>						phantomActor = vtkSmartPointer<vtkActor>::New();
+	vtkSmartPointer<vtkTransform>					phantomToPhysicalTransform = vtkSmartPointer<vtkTransform>::New();
+	vtkSmartPointer<vtkOpenVRRenderWindow>			vrWindow = nullptr;
+	vtkSmartPointer<vtkTransform>					 transformP2L = vtkSmartPointer<vtkTransform>::New();
+	vtkSmartPointer< vtkTransform >					phantomTransform =vtkSmartPointer< vtkTransform >::New();
+	vtkSmartPointer<vtkActor>						sphereActor = vtkSmartPointer<vtkActor>::New();
+	vtkSmartPointer<vtkTransform>					sphereTransform = vtkSmartPointer<vtkTransform>::New();
+
+	cv::Mat											matLeft;
+	cv::Mat											matRight;
+	cv::Mat											rgbMatLeft;
+	cv::Mat											finalMatLeft;
+	cv::Mat											rgbMatRight;
+	cv::Mat											finalMatRight;
+	bool											renderAR = false;
+	vtkSmartPointer<vtkOpenVRRenderer>				arRenderer = vtkSmartPointer<vtkOpenVRRenderer>::New();
+	OVR::OvrvisionPro								ovrvisionProHandle;
+	vtkSmartPointer< vtkTransform >					posMatrix = vtkSmartPointer< vtkTransform >::New();
+	cv::Mat											intrinsic = Mat(3, 3, CV_64FC1);
+	cv::Mat											distortion = Mat(1, 4, CV_64FC1);
 
 private:
 	eccTrackerWidget                                *trackerWidget;
