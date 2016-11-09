@@ -76,7 +76,7 @@ data in realtime, and updates the screen accordingly.
 // OpenCV
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
-#include "I:/d/opencv/sources/modules/cudev/include/opencv2/cudev/ptr2d/detail/gpumat.hpp"
+
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
