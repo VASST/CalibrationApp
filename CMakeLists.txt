@@ -1,15 +1,19 @@
-PROJECT( VRAPP )
+PROJECT( VRApp )
 
-CMAKE_MINIMUM_REQUIRED( VERSION 2.4 )
+CMAKE_MINIMUM_REQUIRED( VERSION 3.0 )
 
 IF ( COMMAND CMAKE_POLICY )
-        CMAKE_POLICY( SET CMP0003 NEW )
+  CMAKE_POLICY( SET CMP0003 NEW )
 ENDIF( COMMAND CMAKE_POLICY )
 
 FIND_PACKAGE( Qt5 REQUIRED COMPONENTS Widgets OpenGL Core Gui )
 SET(CMAKE_AUTOMOC ON)
 SET(CMAKE_AUTOUIC ON)
 SET(CMAKE_AUTORCC ON)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
 
 FIND_PACKAGE( OpenCV REQUIRED )
 FIND_PACKAGE( vtk REQUIRED )
@@ -21,14 +25,6 @@ FIND_PACKAGE( SDL REQUIRED)
 
 FIND_PACKAGE(AIGS REQUIRED)
 INCLUDE(${AIGS_USE_FILE})
-
-SET( OvrvisionPro_SOURCES
-  I:/d/PlusBuild-bin/Deps/OvrvisionPro/OvrvisionPro/src/lib_src/ovrvision_setting.cpp
-  )
-
-SET( OvrvisionPro_HEADERS
-  I:/d/PlusBuild-bin/Deps/OvrvisionPro/OvrvisionPro/src/lib_src/ovrvision_setting.h
-  )
 
 ADD_EXECUTABLE( VRApp
   main.cpp
@@ -44,14 +40,10 @@ ADD_EXECUTABLE( VRApp
   mathUtils.h
   matrix.h
   svd.h
-  ${OvrvisionPro_HEADERS}
-  ${OvrvisionPro_SOURCES}
 )
 
-target_include_directories( VRApp
-							PRIVATE ${SDL_INCLUDE_DIR} ${OPENVR_INCLUDE_DIRS})
-							
-							
+target_include_directories( VRApp PRIVATE ${SDL_INCLUDE_DIR} ${OPENVR_INCLUDE_DIRS})
+
 TARGET_LINK_LIBRARIES( VRApp
   Qt5::Widgets #Qt
   Qt5::OpenGL #Qt
@@ -91,8 +83,8 @@ TARGET_LINK_LIBRARIES( VRApp
   vtkRenderingImage
   vtkRenderingVolumeOpenGL2
   vtksys
+  vtkglew
   vtkRenderingGL2PS${VTK_RENDERING_BACKEND}
   ${OpenCV_LIBS}
-  I:/d/OpenVR/SDL2-Build/Debug/SDL2main.lib
-  I:/d/OpenVR/SDL2-Build/Debug/SDL2.lib
+  OvrvisionPro
 )

@@ -361,7 +361,7 @@ namespace echen
 		};
 
 		// min and max values of the given vector
-		inline T min()
+		inline T emin()
 		{
 			T tmp = _v[0];
 
@@ -369,7 +369,7 @@ namespace echen
 			return (tmp);
 		};
 
-		inline T max()
+		inline T emax()
 		{
 			T tmp = _v[0];
 
@@ -682,7 +682,7 @@ namespace echen
 		};
 
 		// min/max value of the given matrix
-		inline T min()
+		inline T emin()
 		{
 			T tmp = _v[0];
 
@@ -691,7 +691,7 @@ namespace echen
 			return (tmp);
 		};
 
-		inline T max()
+		inline T emax()
 		{
 			T tmp = _v[0];
 
