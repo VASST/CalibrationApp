@@ -43,11 +43,6 @@ eccTrackerWidget::eccTrackerWidget( QWidget *parent )
   collectPoses->setText("Collect Poses");
   vbox->addWidget(collectPoses);
 
-  projectionError = new QPushButton;
-  projectionError->setCheckable(true);
-  projectionError->setText("Projection Error");
-  vbox->addWidget(projectionError);
-
   QHBoxLayout *hbox = new QHBoxLayout;
 
   QLabel *label = new QLabel;

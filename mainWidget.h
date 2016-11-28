@@ -90,14 +90,23 @@ data in realtime, and updates the screen accordingly.
 #include <vtkPolyDataMapper.h>
 #include <vtkPolyDataReader.h>
 
+// Plus includes
+#include <vtkPlusDataCollector.h>
+#include "PlusConfigure.h"
+#include "vtkPlusTransformRepository.h"
+#include "PlusTrackedFrame.h"
+#include "vtkPlusChannel.h"
+#include <vtkPlusNDITracker.h>
+#include "vtkPlusVolumeReconstructor.h"
+
+#include <vtkPlusOvrvisionProVideoSource.h>
+
 // Ovrvision includes
 #include <ovrvision_pro.h>
 
 // VTK forward declaration
 class QVTKWidget;
 class vtkRenderer;
-class vtkNDITracker;
-class vtkTrackerTool;
 class vtkTexture;
 class vtkImageImport;
 
@@ -167,11 +176,6 @@ private slots:
   void createControlDock();
 
   /*!
-  * Update the information from the ovrvision camera
-  */
-  void ovrvisionUpdate();
-
-  /*!
   * Create a dock window for the tracked tools information
   */
   void createToolInformation();
@@ -180,12 +184,6 @@ private slots:
   * Get transform information from tracking device
   */
   void getTransform();
-
-
-  /*!
-  * Pivot calibration routine
-  */
-  void pivotCalibration(bool checked);
 
   /*!
 	* Grab x,y coordinates in image when called
@@ -211,13 +209,6 @@ private slots:
 	* Save the image and 4x4 matrix of tracked camera
 	*/
 	void collectPose();
-
-	/*!
-	* Use to evaluate the projection error between different
-	* hand-eye calibrations. This must be updated before use
-	* with specific camera calibrations
-	*/
-	void calculateProjectionError();
 
 private: /*!< Private QT members. */
   QAction*                                         aboutAct;
@@ -258,16 +249,6 @@ private: /*!< Private VTK members. */
   vtkSmartPointer<vtkOpenVRRenderWindow>			       renWindow = vtkSmartPointer<vtkOpenVRRenderWindow>::New();
   vtkSmartPointer<vtkOpenVRRenderWindowInteractor>       renInt = vtkSmartPointer<vtkOpenVRRenderWindowInteractor>::New();
 
-  // Transforms
-
- /*!
-  * Tracker related objects.
-  */
-  vtkSmartPointer< vtkNDITracker >                myTracker;
-  vtkSmartPointer< vtkTrackerTool >               oculusHMD;
-  vtkSmartPointer< vtkTrackerTool >               referenceCoil;
-  vtkSmartPointer< vtkTrackerTool >				  phantomTool;
-
   bool											  isProbeVisible, isOculusVisible;
 
   echen::Matrix<double>							  leftIntrinsicParam;
@@ -294,13 +275,77 @@ private: /*!< Private VTK members. */
 
 	vtkSmartPointer<vtkActor>						sphereActor = vtkSmartPointer<vtkActor>::New();
 
-
 	cv::Mat											matLeft;
 	cv::Mat											matRight;
-	cv::Mat											rgbMatLeft;
 	cv::Mat											finalMatLeft;
-	cv::Mat											rgbMatRight;
 	cv::Mat											finalMatRight;
+	cv::Mat											undistortedLeft;
+	cv::Mat											undistortedRight;
+
+	// Plus members
+	vtkSmartPointer< vtkXMLDataElement>				configRootElement = vtkSmartPointer<vtkXMLDataElement>::New();
+	vtkSmartPointer<vtkPlusDataCollector>			dataCollector = vtkSmartPointer<vtkPlusDataCollector>::New();;
+	vtkSmartPointer<vtkPlusTransformRepository>		repository = vtkSmartPointer<vtkPlusTransformRepository>::New();
+
+	vtkPlusDevice									*trackerDevice, *ovrDevice, *leftMixerDevice, *rightMixerDevice;
+	vtkPlusChannel									*trackerChannel, *leftVideoChannel, *rightVideoChannel, *leftMixerChannel, *rightMixerChannel;
+
+	vtkPlusNDITracker								*ndiTracker;
+	vtkPlusOvrvisionProVideoSource					*ovrVideo;
+
+	vtkSmartPointer<vtkPlusVirtualMixer>			leftMixer = vtkSmartPointer<vtkPlusVirtualMixer>::New();
+	vtkSmartPointer<vtkPlusVirtualMixer>			rightMixer = vtkSmartPointer<vtkPlusVirtualMixer>::New();
+
+	PlusTrackedFrame								trackedFrame, leftVideoFrame, rightVideoFrame, leftMixerFrame, rightMixerFrame;
+
+	// Plus Transform Names
+	PlusTransformName								camera2TrackerName;
+	PlusTransformName								probe2TrackerName;
+	PlusTransformName								probe2CameraName;
+	PlusTransformName								tip2ProbeName;
+	PlusTransformName								tip2ImageName;
+	PlusTransformName								tip2CameraName;
+	PlusTransformName								camera2ImageName;
+
+	// Plus Transforms
+	vtkSmartPointer<vtkMatrix4x4>					tProbe2Tracker = vtkSmartPointer<vtkMatrix4x4>::New();
+	vtkSmartPointer<vtkMatrix4x4>					tCamera2Image = vtkSmartPointer<vtkMatrix4x4>::New();
+	vtkSmartPointer<vtkMatrix4x4>					tTracker2Camera = vtkSmartPointer<vtkMatrix4x4>::New();
+	vtkSmartPointer<vtkMatrix4x4>					tCamera2Tracker = vtkSmartPointer<vtkMatrix4x4>::New();
+	vtkSmartPointer<vtkMatrix4x4>					tProbe2Image = vtkSmartPointer<vtkMatrix4x4>::New();
+	vtkSmartPointer<vtkMatrix4x4>					tTip2Image = vtkSmartPointer<vtkMatrix4x4>::New();
+	vtkSmartPointer<vtkMatrix4x4>					tTip2Camera = vtkSmartPointer<vtkMatrix4x4>::New();
+
+	// Auxiliary memers
+	vtkMatrix4x4 *pointerPose;
+
+	// input configuration file name
+	std::string inputConfigFileName;
+
+	// Camera intrinsics file name
+	std::string intrinsicsFileName;
+
+	//File stream for experimental output
+	std::ofstream expOutFile;
+
+	// subject ID
+	std::string subjectID;
+
+	// path to experimental results
+	std::string results_root_dir;
+
+	// Path to calibration saved
+	std::string calibration_root_dir;
+
+	// Calibration pose File
+	std::ofstream cam_pose_file;
+
+	// Cam calibration file prefix and post-fix
+	std::string cam_calib_file_prefix, cam_calib_file_postfix;
+
+	// Image counter
+	int img_index;
+
 	bool											renderAR = false;
 	vtkSmartPointer<vtkOpenVRRenderer>				arRenderer = vtkSmartPointer<vtkOpenVRRenderer>::New();
 	OVR::OvrvisionPro								ovrvisionProHandle;

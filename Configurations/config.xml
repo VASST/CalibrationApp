@@ -1,0 +1,106 @@
+<PlusConfiguration version="2.1">
+  <DataCollection StartupDelaySec="1.0" >
+    <DeviceSet 
+      Name="PLUS devices (Ovrvision Pro and NDI Spectra) to stream. "
+      Description="none." />
+
+
+	<Device
+      Id="TrackerDevice"
+      Type="PolarisTracker"
+      SerialPort="4"
+      BaudRate="115200"
+	  AcquisitionRate="60"
+      ToolReferenceFrame="Tracker" >
+      <DataSources>
+		<DataSource Type="Tool" Id="Probe" RomFile="NDIToolDefinitions/Stylus_Update7.rom"  />
+		<DataSource Type="Tool" Id="Model" RomFile="NDIToolDefinitions/8700449.rom" />
+		<DataSource Type="Tool" Id="Camera" RomFile="NDIToolDefinitions/HMDUpdate.rom"  />
+      </DataSources>
+      <OutputChannels>
+        <OutputChannel Id="TrackerStream" >
+		  <DataSource Id="Probe"/>
+		  <DataSource Id="Model" />
+		  <DataSource Id="Camera"/>
+        </OutputChannel>
+      </OutputChannels>
+    </Device>
+	
+	<Device
+      Id="VideoDevice" 
+      Type="OvrvisionPro"
+      DirectShowFilterID="0"
+      Resolution="960 950"
+      Framerate="60"
+	  AcquisitionRate = "45"
+	  Exposure = "22500"
+      CameraSync="TRUE"
+      ProcessingMode="OV_CAMQT_DMSRMP"
+      LeftEyeDataSourceName="LeftVideo"
+      RightEyeDataSourceName="RightVideo" 
+	  Vendor="NVIDIA Corporation">
+      <DataSources>
+        <DataSource Type="Video" Id="LeftVideo" PortUsImageOrientation="MN" ImageType="RGB_COLOR" />
+        <DataSource Type="Video" Id="RightVideo" PortUsImageOrientation="MN" ImageType="RGB_COLOR" />
+      </DataSources>
+      <OutputChannels>
+        <OutputChannel Id="LeftVideoStream" VideoDataSourceId="LeftVideo" />
+        <OutputChannel Id="RightVideoStream" VideoDataSourceId="RightVideo" />
+      </OutputChannels>
+    </Device>
+	
+	<Device 
+      Id="LeftTrackedVideoDevice" 
+      Type="VirtualMixer" >
+      <InputChannels>
+        <InputChannel Id="TrackerStream" />
+        <InputChannel Id="LeftVideoStream" />
+      </InputChannels>
+      <OutputChannels>
+        <OutputChannel Id="LeftTrackedVideoStream"/>
+      </OutputChannels>
+    </Device>
+	
+	<Device 
+      Id="RightTrackedVideoDevice" 
+      Type="VirtualMixer" >
+      <InputChannels>
+        <InputChannel Id="TrackerStream" />
+        <InputChannel Id="RightVideoStream" />
+      </InputChannels>
+      <OutputChannels>
+        <OutputChannel Id="RightTrackedVideoStream"/>
+      </OutputChannels>
+    </Device>
+	
+  </DataCollection>  
+
+  <CoordinateDefinitions>
+  
+    <Transform From="Phantom" To="Model"
+      Matrix="
+        -0.0245 0.9997 -0.0077 -58.3509
+        -0.1436 -0.0112 -0.9896 31.2855
+        -0.9893 -0.0231 0.1438 -137.54
+        0 0 0 1"
+      Error="0.404711" Date="012712_152104" />
+	  
+    <Transform From="PointerTip" To="Probe"
+      Matrix="
+        1 0 0 58.4242374500806
+        0 1 0 -101.785071483604
+        0 0 1 31.83450912
+        0 0 0 1"
+      Error="0.21" Date="012712_152030" />
+	  
+	 <Transform From="Camera" To="CameraImagePlane"
+		Matrix="
+		0.0677294484076749    -0.992989179048552   -0.0968773044158076   -61.6285338697333
+		0.737296753348973   0.11523277439025   -0.665668765383645   -14.6388968911687
+		0.672165321419851   -0.0263419437173227   0.739932350071099   -4.60575695614759
+        0 0 0 1"
+      Error="0.02" Date="12102016_2318" />
+		
+  </CoordinateDefinitions>  
+
+</PlusConfiguration>

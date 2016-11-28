@@ -73,11 +73,9 @@ POSSIBILITY OF SUCH DAMAGES.
 
 // VTK includes
 #include <QVTKWidget.h>
-#include <vtkNDITracker.h>
 #include <vtkProperty.h>
 #include <vtkRenderWindow.h>
 #include <vtkRenderer.h>
-#include <vtkTrackerTool.h>
 #include <vtkTransform.h>
 
 // VTK
@@ -114,6 +112,20 @@ POSSIBILITY OF SUCH DAMAGES.
 #include <ovrvision_pro.h>
 #include <../src/lib_src/ovrvision_setting.h>
 
+// Plus
+#include <vtkPlusNDITracker.h>
+#include "PlusTrackedFrame.h"
+#include "PlusConfigure.h"
+#include "vtkCommand.h"
+#include "vtkCallbackCommand.h"
+#include "vtkPlusDataCollector.h"
+#include "vtkPlusChannel.h"
+#include "vtkPlusDataSource.h"
+#include "vtkPlusDevice.h"
+#include "vtkPlusRfProcessor.h"
+#include "vtkPlusSavedDataSource.h"
+#include "vtkPlusVirtualMixer.h"
+
 // OpenCV
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
@@ -141,19 +153,12 @@ template< class PReader > vtkPolyData *readAnPolyData(const char *fname) {
 mainWidget::mainWidget(QWidget* parent)
   : QMainWindow(parent)
 {
-  /*!
-  * use QVTKWidget as the centralwidget of the mainwidget.
-  */
-//  qvtk = new QVTKWidget();
- // qvtk->setMinimumSize(480, 480);
- // setCentralWidget(qvtk);
-	
   //
   // VTK related objects
   //
   createVTKObjects();
   setupVTKPipeline();
-	setupARRendering();
+  setupARRendering();
 
   /*!
   * create the rest of the QT/GUI.
@@ -167,25 +172,8 @@ mainWidget::mainWidget(QWidget* parent)
 
 mainWidget::~mainWidget()
 {
-  myTracker->StopTracking();   /*!< Make sure the tracker is stopped when the program exits. */
   this->destroyVTKObjects();   /*!< VTK cleanup. */
-
-	if (ovrvisionProHandle.isOpen()) /*!< Close ovrvision device if still open upon exit. */
-  {
-		ovrvisionProHandle.Close();
-  }
-}
-
-void mainWidget::ovrvisionUpdate()
-{
-	ovrvisionProHandle.SetCameraExposure(22500);
-
-  // Query the SDK for the latest frames
-	ovrvisionProHandle.PreStoreCamData(OVR::OV_CAMQT_DMSRMP);
-
-  // Grab Left and Right Images
-	cv::Mat matLeft(ovrvisionProHandle.GetCamHeight(), ovrvisionProHandle.GetCamWidth(), CV_8UC4, ovrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_LEFT));
-	cv::Mat matRight(ovrvisionProHandle.GetCamHeight(), ovrvisionProHandle.GetCamWidth(), CV_8UC4, ovrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_RIGHT));
+  dataCollector->Stop();
 }
 
 Point pt1;
@@ -207,426 +195,6 @@ void mainWidget::onMouse(int event, int x, int y, int flags, void* param)
   }
 }
 
-void mainWidget::calculateProjectionError()
-{
-	// Query the SDK for the latest frames
-	ovrvisionProHandle.PreStoreCamData(OVR::OV_CAMQT_DMSRMP);
-
-	// Grab image
-	cv::Mat matLeft(ovrvisionProHandle.GetCamHeight(), ovrvisionProHandle.GetCamWidth(), CV_8UC4, ovrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_LEFT));
-	
-	// Undistort image
-	cv::Mat undistorted;
-	undistort(matLeft, undistorted, intrinsic, distortion);
-
-	// Set p2l hand-eye calibration
-	vtkSmartPointer<vtkTransform> p2lTransform = vtkSmartPointer<vtkTransform>::New();
-	vtkSmartPointer<vtkMatrix4x4> p2lMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
-	p2lMatrix->SetElement(0, 0, 0.0677294484076749);
-	p2lMatrix->SetElement(0, 1, -0.992989179048552); 
-	p2lMatrix->SetElement(0, 2, -0.0968773044158076);
-	p2lMatrix->SetElement(0, 3, -61.6285338697333); 
-
-	p2lMatrix->SetElement(1, 0, 0.737296753348973); 
-	p2lMatrix->SetElement(1, 1, 0.11523277439025); 
-	p2lMatrix->SetElement(1, 2, -0.665668765383645); 
-	p2lMatrix->SetElement(1, 3, -14.6388968911687); 
-
-	p2lMatrix->SetElement(2, 0, 0.672165321419851); 
-	p2lMatrix->SetElement(2, 1, -0.0263419437173227); 
-	p2lMatrix->SetElement(2, 2, 0.739932350071099); 
-	p2lMatrix->SetElement(2, 3, -4.60575695614759); 
-
-	p2lMatrix->SetElement(3, 0, 0);
-	p2lMatrix->SetElement(3, 1, 0);
-	p2lMatrix->SetElement(3, 2, 0);
-	p2lMatrix->SetElement(3, 3, 1);
-
-	p2lTransform->PostMultiply();
-	p2lTransform->Identity();
-	p2lTransform->Concatenate(referenceCoil->GetTransform());
-	p2lTransform->Concatenate(oculusHMD->GetTransform()->GetLinearInverse());
-	p2lTransform->Concatenate(p2lMatrix);
-	double posePosition[3];
-
-	p2lTransform->GetPosition(posePosition);
-
-	//Set Tsai calibration
-	vtkSmartPointer<vtkTransform> tsaiTransform = vtkSmartPointer<vtkTransform>::New();
-	vtkSmartPointer<vtkMatrix4x4> tsaiMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
-	tsaiMatrix->SetElement(0, 0, 0.06308);
-	tsaiMatrix->SetElement(0, 1, -0.99365);
-	tsaiMatrix->SetElement(0, 2, -0.093137);
-	tsaiMatrix->SetElement(0, 3, -58.705);
-
-	tsaiMatrix->SetElement(1, 0, 0.7493);
-	tsaiMatrix->SetElement(1, 1, 0.1088);
-	tsaiMatrix->SetElement(1, 2, -0.65324);
-	tsaiMatrix->SetElement(1, 3, -20.885);
-
-	tsaiMatrix->SetElement(2, 0, 0.65922);
-	tsaiMatrix->SetElement(2, 1, -0.028581);
-	tsaiMatrix->SetElement(2, 2, 0.7514);
-	tsaiMatrix->SetElement(2, 3, 0.98286);
-
-	tsaiMatrix->SetElement(3, 0, 0);
-	tsaiMatrix->SetElement(3, 1, 0);
-	tsaiMatrix->SetElement(3, 2, 0);
-	tsaiMatrix->SetElement(3, 3, 1);
-
-	tsaiTransform->PostMultiply();
-	tsaiTransform->Identity();
-	tsaiTransform->Concatenate(referenceCoil->GetTransform());
-	tsaiTransform->Concatenate(oculusHMD->GetTransform()->GetLinearInverse());
-	tsaiTransform->Concatenate(tsaiMatrix);
-	double tsaiPosition[3];
-	tsaiTransform->GetPosition(tsaiPosition);
-
-	// Set Navy calibration
-	vtkSmartPointer<vtkTransform> navyTransform = vtkSmartPointer<vtkTransform>::New();
-	vtkSmartPointer<vtkMatrix4x4> navyMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
-	navyMatrix->SetElement(0, 0, 0.066094);
-	navyMatrix->SetElement(0, 1, -0.9942);
-	navyMatrix->SetElement(0, 2, -0.084801);
-	navyMatrix->SetElement(0, 3, -59.594);
-
-	navyMatrix->SetElement(1, 0, 0.75048);
-	navyMatrix->SetElement(1, 1, 0.10554);
-	navyMatrix->SetElement(1, 2, -0.65242);
-	navyMatrix->SetElement(1, 3, -21.016);
-
-	navyMatrix->SetElement(2, 0, 0.65759);
-	navyMatrix->SetElement(2, 1, -0.02052);
-	navyMatrix->SetElement(2, 2, 0.7531);
-	navyMatrix->SetElement(2, 3, 1.9691);
-
-	navyMatrix->SetElement(3, 0, 0);
-	navyMatrix->SetElement(3, 1, 0);
-	navyMatrix->SetElement(3, 2, 0);
-	navyMatrix->SetElement(3, 3, 1);
-
-	navyTransform->PostMultiply();
-	navyTransform->Identity();
-	navyTransform->Concatenate(referenceCoil->GetTransform());
-	navyTransform->Concatenate(oculusHMD->GetTransform()->GetLinearInverse());
-	navyTransform->Concatenate(navyMatrix);
-	double navyPosition[3];
-	navyTransform->GetPosition(navyPosition);
-
-	// Set inria calibration
-	vtkSmartPointer<vtkTransform> inriaTransform = vtkSmartPointer<vtkTransform>::New();
-	vtkSmartPointer<vtkMatrix4x4> inriaMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
-	inriaMatrix->SetElement(0, 0, 0.066176);
-	inriaMatrix->SetElement(0, 1, -0.9942);
-	inriaMatrix->SetElement(0, 2, -0.084783);
-	inriaMatrix->SetElement(0, 3, -59.6);
-
-	inriaMatrix->SetElement(1, 0, 0.75052);
-	inriaMatrix->SetElement(1, 1, 0.10559);
-	inriaMatrix->SetElement(1, 2, -0.65235);
-	inriaMatrix->SetElement(1, 3, -21.022);
-
-	inriaMatrix->SetElement(2, 0, 0.65752);
-	inriaMatrix->SetElement(2, 1, -0.020461);
-	inriaMatrix->SetElement(2, 2, 0.75316);
-	inriaMatrix->SetElement(2, 3, 1.9791);
-
-	inriaMatrix->SetElement(3, 0, 0);
-	inriaMatrix->SetElement(3, 1, 0);
-	inriaMatrix->SetElement(3, 2, 0);
-	inriaMatrix->SetElement(3, 3, 1);
-
-	inriaTransform->PostMultiply();
-	inriaTransform->Identity();
-	inriaTransform->Concatenate(referenceCoil->GetTransform());
-	inriaTransform->Concatenate(oculusHMD->GetTransform()->GetLinearInverse());
-	inriaTransform->Concatenate(inriaMatrix);
-	double inriaPosition[3];
-	inriaTransform->GetPosition(inriaPosition);
-
-	// Set Dual calibration
-	vtkSmartPointer<vtkTransform> dualTransform = vtkSmartPointer<vtkTransform>::New();
-	vtkSmartPointer<vtkMatrix4x4> dualMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
-	dualMatrix->SetElement(0, 0, 0.076184);
-	dualMatrix->SetElement(0, 1, -0.99475);
-	dualMatrix->SetElement(0, 2, -0.068354);
-	dualMatrix->SetElement(0, 3, -63.642);
-
-	dualMatrix->SetElement(1, 0, 0.76375);
-	dualMatrix->SetElement(1, 1, 0.10229);
-	dualMatrix->SetElement(1, 2, -0.63736);
-	dualMatrix->SetElement(1, 3, -24.856);
-
-	dualMatrix->SetElement(2, 0, 0.641);
-	dualMatrix->SetElement(2, 1, -0.0036492);
-	dualMatrix->SetElement(2, 2, 0.76753);
-	dualMatrix->SetElement(2, 3, 5.0178);
-
-	dualMatrix->SetElement(3, 0, 0);
-	dualMatrix->SetElement(3, 1, 0);
-	dualMatrix->SetElement(3, 2, 0);
-	dualMatrix->SetElement(3, 3, 1);
-
-	dualTransform->PostMultiply();
-	dualTransform->Identity();
-	dualTransform->Concatenate(referenceCoil->GetTransform());
-	dualTransform->Concatenate(oculusHMD->GetTransform()->GetLinearInverse());
-	dualTransform->Concatenate(dualMatrix);
-	double dualPosition[3];
-	dualTransform->GetPosition(dualPosition);
-
-	// Set branch calibration
-	vtkSmartPointer<vtkTransform> branchTransform = vtkSmartPointer<vtkTransform>::New();
-	vtkSmartPointer<vtkMatrix4x4> branchMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
-	branchMatrix->SetElement(0, 0, 0.0793);
-	branchMatrix->SetElement(0, 1, -0.9917);
-	branchMatrix->SetElement(0, 2, -0.1013);
-	branchMatrix->SetElement(0, 3, -54.1888);
-
-	branchMatrix->SetElement(1, 0, 0.7845);
-	branchMatrix->SetElement(1, 1, 0.1248);
-	branchMatrix->SetElement(1, 2, -0.6075);
-	branchMatrix->SetElement(1, 3, -34.1630);
-
-	branchMatrix->SetElement(2, 0, 0.6151);
-	branchMatrix->SetElement(2, 1, -0.0313);
-	branchMatrix->SetElement(2, 2, 0.7878);
-	branchMatrix->SetElement(2, 3, -1.5138);
-
-	branchMatrix->SetElement(3, 0, 0);
-	branchMatrix->SetElement(3, 1, 0);
-	branchMatrix->SetElement(3, 2, 0);
-	branchMatrix->SetElement(3, 3, 1);
-
-	branchTransform->PostMultiply();
-	branchTransform->Identity();
-	branchTransform->Concatenate(referenceCoil->GetTransform());
-	branchTransform->Concatenate(oculusHMD->GetTransform()->GetLinearInverse());
-	branchTransform->Concatenate(branchMatrix);
-	double branchPosition[3];
-	branchTransform->GetPosition(branchPosition);
-
-	// Find circle in image
-	cv::Mat hsv;
-	cv::Mat threshold;
-
-	// Convert BGRA image to HSV image
-	cv::cvtColor(undistorted, hsv, COLOR_BGR2HSV);
-	cv::Mat drawing;
-
-	cv::cvtColor(undistorted, drawing, COLOR_BGR2RGB);
-	drawing.setTo(cv::Scalar(0, 0, 0));
-
-	// Filter everything except red - (0, 70, 50) -> (10, 255, 255) & (160, 70, 50) -> (179, 255, 255)
-	cv::inRange(hsv, cv::Scalar(HMinLower->value(), SMinLower->value(), VMinLower->value()), cv::Scalar(HMaxLower->value(), SMaxLower->value(), VMaxLower->value()), thresholdFinal);
-	cv::inRange(hsv, cv::Scalar(HMinUpper->value(), SMinUpper->value(), VMinUpper->value()), cv::Scalar(HMaxUpper->value(), SMaxUpper->value(), VMaxUpper->value()), threshold);
-
-	cv::Mat mask;
-	cv::addWeighted(thresholdFinal, 1.0, threshold, 1.0, 0.0, mask);
-
-	// Create a Gaussian & median Blur Filter
-	medianBlur(mask, mask, 5);
-	GaussianBlur(mask, mask, Size(9, 9), 2, 2);
-	vector<Vec3f> circles;
-
-	// Draw the circles detected
-	Mat canny_output;
-	vector<vector<Point> > contours;
-	vector<Vec4i> hierarchy;
-
-	// Apply the Hough Transform to find the circles
-	HoughCircles(mask, circles, CV_HOUGH_GRADIENT, 2, mask.rows / 16, 255, 30);
-
-	vector<Point2f> finalCenter(1);
-	// Outline circle and centroid
-	if (circles.size() > 0)
-	{
-		Point center(circles[0][0], circles[0][1]);
-		int radius = circles[0][2];
-
-		// Draw circle on image
-		circle(drawing, center, radius, Scalar(100, 100, 100), -1, 8, 0);
-
-		int thresh = 100;
-		int max_thresh = 255;
-		RNG rng(12345);
-
-		// Detect edges using canny
-		Canny(drawing, canny_output, thresh, thresh * 2, 3);
-
-		// Find contours
-		findContours(canny_output, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
-
-		/// Approximate contours to polygons + get bounding rects and circles
-		vector<vector<Point> > contours_poly(contours.size());
-		vector<Point2f>centerTwo(contours.size());
-		vector<float>radiusTwo(contours.size());
-
-		for (int i = 0; i < contours.size(); i++)
-		{
-			approxPolyDP(Mat(contours[i]), contours_poly[i], 3, true); // Finds polygon
-			minEnclosingCircle((Mat)contours_poly[i], centerTwo[i], radiusTwo[i]); // Finds circle
-
-			Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
-		}
-		finalCenter[0].x = centerTwo[0].x;
-		finalCenter[0].y = centerTwo[0].y;
-	}
-
-	// If Hough Circles fails to find the circle
-	else if (circles.size() == 0)
-	{
-		int thresh = 100;
-		int max_thresh = 255;
-		RNG rng(12345);
-
-		medianBlur(mask, mask, 3);
-
-		// Detect edges using canny
-		Canny(mask, canny_output, thresh, thresh * 2, 3);
-
-		// Find contours
-		findContours(canny_output, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
-
-		/// Approximate contours to polygons + get bounding rects and circles
-		vector<vector<Point> > contours_poly(contours.size());
-		vector<Rect> boundRect(contours.size());
-		vector<Point2f>center(contours.size());
-		vector<float>radius(contours.size());
-
-		for (int i = 0; i < contours.size(); i++)
-		{
-			approxPolyDP(Mat(contours[i]), contours_poly[i], 3, true); // Finds polygon
-			boundRect[i] = boundingRect(Mat(contours_poly[i]));		   // Finds rectangle
-			minEnclosingCircle((Mat)contours_poly[i], center[i], radius[i]); // Finds circle
-		}
-
-		/// Draw circle
-		Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
-
-		finalCenter[0].x = center[0].x;
-		finalCenter[0].y = center[0].y;
-	}
-
-	// Calculate position of centroid for each hand-eye calibration
-	double xPrime = posePosition[0] / posePosition[2];
-	double yPrime = posePosition[1] / posePosition[2];
-
-	double u = (leftIntrinsicParam[0][0] * xPrime) + leftIntrinsicParam[0][2];
-	double v = (leftIntrinsicParam[1][1] * yPrime) + leftIntrinsicParam[1][2];
-
-	double xPrime3 = tsaiPosition[0] / tsaiPosition[2];
-	double yPrime3 = tsaiPosition[1] / tsaiPosition[2];
-
-	double u3 = (leftIntrinsicParam[0][0] * xPrime3) + leftIntrinsicParam[0][2];
-	double v3 = (leftIntrinsicParam[1][1] * yPrime3) + leftIntrinsicParam[1][2];
-
-	double xPrime4 = navyPosition[0] / navyPosition[2];
-	double yPrime4 = navyPosition[1] / navyPosition[2];
-
-	double u4 = (leftIntrinsicParam[0][0] * xPrime4) + leftIntrinsicParam[0][2];
-	double v4 = (leftIntrinsicParam[1][1] * yPrime4) + leftIntrinsicParam[1][2];
-
-	double xPrime5 = inriaPosition[0] / inriaPosition[2];
-	double yPrime5 = inriaPosition[1] / inriaPosition[2];
-
-	double u5 = (leftIntrinsicParam[0][0] * xPrime5) + leftIntrinsicParam[0][2];
-	double v5 = (leftIntrinsicParam[1][1] * yPrime5) + leftIntrinsicParam[1][2];
-
-	double xPrime6 = dualPosition[0] / dualPosition[2];
-	double yPrime6 = dualPosition[1] / dualPosition[2];
-
-	double u6 = (leftIntrinsicParam[0][0] * xPrime6) + leftIntrinsicParam[0][2];
-	double v6 = (leftIntrinsicParam[1][1] * yPrime6) + leftIntrinsicParam[1][2];
-
-	double xPrime7 = branchPosition[0] / branchPosition[2];
-	double yPrime7 = branchPosition[1] / branchPosition[2];
-
-	double u7 = (leftIntrinsicParam[0][0] * xPrime7) + leftIntrinsicParam[0][2];
-	double v7 = (leftIntrinsicParam[1][1] * yPrime7) + leftIntrinsicParam[1][2];
-
-	// Calculate distance between points
-	double x1 = finalCenter[0].x;
-	double y1 = finalCenter[0].y;
-	double x2 = u;
-	double y2 = v;
-	double x3 = u3;
-	double y3 = v3;
-	double x4 = u4;
-	double y4 = v4;
-	double x5 = u5;
-	double y5 = v5;
-	double x6 = u6;
-	double y6 = v6;
-	double x7 = u7;
-	double y7 = v7;
-
-	// Calculate distance from ground truth
-	double distance = sqrt((x2 - x1)*(x2 - x1) + (y2 - y1) * (y2 - y1));
-	double distanceTsai = sqrt((x3 - x1) * (x3 - x1) + (y3 - y1) * (y3 - y1));
-	double distanceNavy = sqrt((x4 - x1) * (x4 - x1) + (y4 - y1) * (y4 - y1));
-	double distanceInria = sqrt((x5 - x1) * (x5 - x1) + (y5 - y1) * (y5 - y1));
-	double distanceDual = sqrt((x6 - x1) * (x6 - x1) + (y6 - y1) * (y6 - y1));
-	double distanceBranch = sqrt((x7 - x1) * (x7 - x1) + (y7 - y1) * (y7 - y1));
-
-	// Set centroid to variables for drawing
-	vector<Point2f> p2lCenter(1);
-	p2lCenter[0].x = u;
-	p2lCenter[0].y = v;
-
-	vector<Point2f> tsaiCenter(1);
-	tsaiCenter[0].x = u3;
-	tsaiCenter[0].y = v3;
-
-	vector<Point2f> navyCenter(1);
-	navyCenter[0].x = u4;
-	navyCenter[0].y = v4;
-
-	vector<Point2f> inriaCenter(1);
-	inriaCenter[0].x = u5;
-	inriaCenter[0].y = v5;
-
-	vector<Point2f> dualCenter(1);
-	dualCenter[0].x = u6;
-	dualCenter[0].y = v6;
-
-	vector<Point2f> branchCenter(1);
-	branchCenter[0].x = u7;
-	branchCenter[0].y = v7;
-
-	// Draw circles
-	circle(undistorted, finalCenter[0], 3, Scalar(100, 100, 100), -1, 8, 0);
-	circle(undistorted, p2lCenter[0], 3, Scalar(255, 255, 0), -1, 8, 0);// Blue
-	circle(undistorted, tsaiCenter[0], 3, Scalar(0, 255, 0), -1, 8, 0); // Lime
-	circle(undistorted, navyCenter[0], 3, Scalar(255, 255, 0), -1, 8, 0); // Blue
-	circle(undistorted, inriaCenter[0], 3, Scalar(255, 0, 255), -1, 8, 0); // Pink
-	circle(undistorted, dualCenter[0], 3, Scalar(0, 255, 255), -1, 8, 0); // Yellow
-	circle(undistorted, branchCenter[0], 3, Scalar(255, 255, 255), -1, 8, 0); // White
-
-	// Save position and projection error data to file
-	ofstream dataFile("I:/DataCollection/ColNov5.csv");
-	dataFile << "Hand Eye Calibration\n";
-	dataFile << point2Line->GetElement(0, 0) << "," << point2Line->GetElement(0, 1) << "," << point2Line->GetElement(0, 2) << "," << point2Line->GetElement(0, 3) << "\n";
-	dataFile << point2Line->GetElement(1, 0) << "," << point2Line->GetElement(1, 1) << "," << point2Line->GetElement(1, 2) << "," << point2Line->GetElement(1, 3) << "\n";
-	dataFile << point2Line->GetElement(2, 0) << "," << point2Line->GetElement(2, 1) << "," << point2Line->GetElement(2, 2) << "," << point2Line->GetElement(2, 3) << "\n";
-	dataFile << point2Line->GetElement(3, 0) << "," << point2Line->GetElement(3, 1) << "," << point2Line->GetElement(3, 2) << "," << point2Line->GetElement(3, 3) << "\n";
-	dataFile << "Circle Location" << "," << x1 << "," << y1 << "\n";
-	dataFile << "Point 2 Line" << "," << u << "," << v << "," << posePosition[2] << "," << distance << "\n";
-	dataFile << "Tsai" << "," << u3 << "," << v3 << "," << tsaiPosition[2] << "," << distanceTsai << "\n";
-	dataFile << "Navy" << "," << u4 << "," << v4 << "," << navyPosition[2] << "," << distanceNavy << "\n";
-	dataFile << "Inria" << "," << u5 << "," << v5 << "," << inriaPosition[2] << "," << distanceInria << "\n";
-	dataFile << "Dual" << "," << u6 << "," << v6 << "," << dualPosition[2] << "," << distanceDual << "\n";
-	dataFile << "Branch" << "," << u7 << "," << v7 << "," << branchPosition[2] << "," << distanceBranch << "\n";
-
-	imwrite("I:/DataCollection/collectionNov5.png", undistorted);
-
-	// Show Blur result
-	namedWindow("Results", CV_WINDOW_AUTOSIZE);
-	imshow("Results", undistorted);
-	cv::waitKey(0);
-
-}
-
 void mainWidget::collectPose()
 {
 	// Grab left image
@@ -636,17 +204,36 @@ void mainWidget::collectPose()
 	cv::Mat undistorted;
 	undistort(matLeft, undistorted, intrinsic, distortion);
 
-	// Get transform matrix of tracked camera
-	vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
-	oculusHMD->GetTransform()->GetMatrix(transform);
+	if (probe2TrackerName.IsValid())
+	{
+		trackedFrame.GetCustomFrameTransform(probe2TrackerName, tProbe2Tracker);
+	}
+
+	if (camera2TrackerName.IsValid())
+	{
+		trackedFrame.GetCustomFrameTransform(camera2TrackerName, tTracker2Camera);
+
+	}
+
+	if (camera2ImageName.IsValid())
+	{
+		trackedFrame.GetCustomFrameTransform(camera2ImageName, tCamera2Image);
+
+	}
+
+	bool isMatrixValid(false);
+	repository->GetTransform(camera2ImageName, tCamera2Image, &isMatrixValid);
+
+	isMatrixValid = false;
+	repository->GetTransform(PlusTransformName("PointerTip", "CameraImagePlane"), tProbe2Image, &isMatrixValid);
 
 	// Save data
-	ofstream myfile("I:/ImagePoses/pose.csv");
-	myfile << transform->GetElement(0, 0) << "," << transform->GetElement(0, 1) << "," << transform->GetElement(0, 2) << "," << transform->GetElement(0, 3)
-		<< "," << transform->GetElement(1, 0) << "," << transform->GetElement(1, 1) << "," << transform->GetElement(1, 2) << "," << transform->GetElement(1, 3)
-		<< "," << transform->GetElement(2, 0) << "," << transform->GetElement(2, 1) << "," << transform->GetElement(2, 2) << "," << transform->GetElement(2, 3)
-		<< "," << transform->GetElement(3, 0) << "," << transform->GetElement(3, 1) << "," << transform->GetElement(3, 2) << "," << transform->GetElement(3, 3);
-	imwrite("I:/ImagePoses/pose.png", undistorted);
+	ofstream myfile("./Results/pose.csv");
+	myfile << tProbe2Image->GetElement(0, 0) << "," << tProbe2Image->GetElement(0, 1) << "," << tProbe2Image->GetElement(0, 2) << "," << tProbe2Image->GetElement(0, 3)
+		<< "," << tProbe2Image->GetElement(1, 0) << "," << tProbe2Image->GetElement(1, 1) << "," << tProbe2Image->GetElement(1, 2) << "," << tProbe2Image->GetElement(1, 3)
+		<< "," << tProbe2Image->GetElement(2, 0) << "," << tProbe2Image->GetElement(2, 1) << "," << tProbe2Image->GetElement(2, 2) << "," << tProbe2Image->GetElement(2, 3)
+		<< "," << tProbe2Image->GetElement(3, 0) << "," << tProbe2Image->GetElement(3, 1) << "," << tProbe2Image->GetElement(3, 2) << "," << tProbe2Image->GetElement(3, 3);
+	imwrite("./Results/pose.png", undistorted);
 }
 
 // on accept the next pose is calculated
@@ -654,9 +241,6 @@ void mainWidget::nextPose(bool checked)
 {
   if (checked)
   {
-		// Update OVRvision device
-    ovrvisionUpdate();
-
 		// Initialize variables
 		cv::Mat hsv;
 		cv::Mat threshold;
@@ -832,9 +416,6 @@ void mainWidget::manualSelection(bool checked)
 {
   if (checked)
   {
-		// Update OVRvision device
-    ovrvisionUpdate();
-
     // if GetTransform is clicked
     if (trackerWidget->calibrationButton->isChecked() == true)
     {
@@ -910,8 +491,46 @@ void mainWidget::manualSelection(bool checked)
 */
 void mainWidget::createVTKObjects()
 {
+	inputConfigFileName = "./config/config.xml";
+	intrinsicsFileName = "./config/left_calibration.xml";
 
-  myTracker = vtkSmartPointer< vtkNDITracker >::New();
+	// Create output directory
+	results_root_dir = "./Results/";
+	if (CreateDirectory(results_root_dir.c_str(), NULL) ||
+		ERROR_ALREADY_EXISTS != GetLastError())
+		std::cout << "Output directory Created." << std::endl;
+
+	// Create calibration saves directory
+	calibration_root_dir = "./Calibration";
+	if (CreateDirectory(calibration_root_dir.c_str(), NULL) ||
+		ERROR_ALREADY_EXISTS != GetLastError())
+		std::cout << "Calibration directory Created." << std::endl;
+
+	trackerDevice = NULL;
+
+	// Read configuration
+	if (PlusXmlUtils::ReadDeviceSetConfigurationFromFile(configRootElement, inputConfigFileName.c_str()) == PLUS_FAIL)
+	{
+		LOG_ERROR("Unable to read configuration from file" << inputConfigFileName.c_str());
+		exit;
+	}
+
+	vtkPlusConfig::GetInstance()->SetDeviceSetConfigurationData(configRootElement);
+
+	// Read configuration file
+	if (dataCollector->ReadConfiguration(configRootElement) != PLUS_SUCCESS)
+	{
+		LOG_ERROR("Configuration incorrect for vtkPlusDataCollector.");
+		exit;
+	}
+
+	camera2TrackerName.SetTransformName("CameraToTracker");
+	probe2TrackerName.SetTransformName("ProbeToTracker");
+	probe2CameraName.SetTransformName("ProbeToCamera");
+	tip2ProbeName.SetTransformName("PointerTipToProbe");
+	tip2ImageName.SetTransformName("PointerTipToCameraImagePlane");
+	tip2CameraName.SetTransformName("PointerTipToCamera");
+	camera2ImageName.SetTransformName("CameraToCameraImagePlane");
 }
 
 /*!
@@ -926,20 +545,34 @@ void mainWidget::destroyVTKObjects()
 */
 void mainWidget::setupVTKPipeline()
 {
-
-  ren->SetBackground(.1, .2, .4);
- // qvtk->GetRenderWindow()->AddRenderer(ren);
-  renWindow->AddRenderer(ren);
-  renInt->SetRenderWindow(renWindow);
-
+	ren->SetBackground(.1, .2, .4);
+	renWindow->AddRenderer(ren);
+	renInt->SetRenderWindow(renWindow);
 	isTrackerInit = false;
-
 }
 
 void mainWidget::setupARRendering()
 {
+	// Set intrinsic calibration
+	leftIntrinsicParam = Matrix<double>(3, 3);
+	leftIntrinsicParam[0][0] = intrinsic.at<double>(0, 0) = 4.4308778509658629e+02;
+	leftIntrinsicParam[0][1] = intrinsic.at<double>(0, 1) = 0;
+	leftIntrinsicParam[0][2] = intrinsic.at<double>(0, 2) = 4.9137630327079307e+02;
+	leftIntrinsicParam[1][0] = intrinsic.at<double>(1, 0) = 0;
+	leftIntrinsicParam[1][1] = intrinsic.at<double>(1, 1) = 4.4088255151097923e+02;
+	leftIntrinsicParam[1][2] = intrinsic.at<double>(1, 2) = 4.7733731041974312e+02;
+	leftIntrinsicParam[2][0] = intrinsic.at<double>(2, 0) = 0;
+	leftIntrinsicParam[2][1] = intrinsic.at<double>(2, 1) = 0;
+	leftIntrinsicParam[2][2] = intrinsic.at<double>(2, 2) = 1;
+
+	// Distortion Parameters
+	distortion.at<double>(0, 0) = -3.4217579502885637e-01;
+	distortion.at<double>(0, 1) = 1.5322858206254297e-01;
+	distortion.at<double>(0, 2) = 7.0265221404534526e-04;
+	distortion.at<double>(0, 3) = -1.0123352757817517e-03;
+
 	// Requested capture format
-	OVR::Camprop RequestedFormat(OVR::OV_CAMVR_FULL); // 960x950
+	/*	OVR::Camprop RequestedFormat(OVR::OV_CAMVR_FULL); // 960x950
 	bool CameraSync(true);
 	ovrvisionProHandle.SetCameraExposure(22500);
 
@@ -947,11 +580,11 @@ void mainWidget::setupARRendering()
 	auto vendor = "NVIDIA Corporation";
 	if (!ovrvisionProHandle.isOpen())
 	{
-		if (!ovrvisionProHandle.Open(0, RequestedFormat, vendor)) // We don't need to share it with OpenGL/D3D, but in the future we could access the images in GPU memory
-		{
-			printf("Unable to connect to OvrvisionPro device.");
-			exit(1);
-		}
+	if (!ovrvisionProHandle.Open(0, RequestedFormat, vendor)) // We don't need to share it with OpenGL/D3D, but in the future we could access the images in GPU memory
+	{
+	printf("Unable to connect to OvrvisionPro device.");
+	exit(1);
+	}
 	}
 	ovrvisionProHandle.SetCameraSyncMode(CameraSync);
 
@@ -984,7 +617,7 @@ void mainWidget::setupARRendering()
 	undistort(matLeft, undistorted, intrinsic, distortion);
 
 	// Convert From BGRA to RGB
-	cv::cvtColor(undistorted, rgbMatLeft, CV_BGRA2RGB); 
+	cv::cvtColor(undistorted, rgbMatLeft, CV_BGRA2RGB);
 	cv::cvtColor(matRight, rgbMatRight, CV_BGRA2RGB);
 
 	// Flip Orientation for VTK
@@ -1013,140 +646,18 @@ void mainWidget::setupARRendering()
 	textureLeft->SetInputConnection(imageImportLeft->GetOutputPort());
 	textureRight->SetInputConnection(imageImportRight->GetOutputPort());
 
-	// Phantom calibration
-	double m[16] = { -0.0245,    0.9997,   -0.0077,  -58.3509,
-		-0.1436,   -0.0112,   -0.9896,  31.2855,
-		-0.9893,   -0.0231,    0.1438 , -137.54,
-		0,         0,         0,    1.0 };
-
-	phantomToPhysicalTransform->GetMatrix()->DeepCopy(m);
-
 	// left eye point to line
-	double n[16] = { 0.076504987514104, -0.992849764678156, -0.0916314993001692, -65.9036612287519,
-		0.738991468675458, 0.118158036072677, -0.663272408393668, -17.5314838935303,
-		0.66935685259087, -0.0169712489221592, 0.742747184848025, -3.65616773796918,
-		0, 0, 0, 1 };
+	double p2l[16] = { 0.0677294484076749, -0.992989179048552, -0.0968773044158076, -61.6285338697333,
+	0.737296753348973, 0.11523277439025, -0.665668765383645, -14.6388968911687,
+	0.672165321419851, -0.0263419437173227, 0.739932350071099, -4.60575695614759, 0, 0, 0, 1 };
 
-	double p2l[16] = { 0.0677294484076749, -0.992989179048552, -0.0968773044158076, -61.6285338697333, 0.737296753348973, 0.11523277439025, -0.665668765383645,
-		-14.6388968911687, 0.672165321419851, -0.0263419437173227, 0.739932350071099, -4.60575695614759, 0, 0, 0, 1
-	};
-
-	transformP2L->GetMatrix()->DeepCopy(p2l);
-
-	myTracker->LoadVirtualSROM(6, "I:/Stylus_Update7.rom"); // reference rom in port 4 Stylus_PRevision3 Stylus_Update7.rom
-    referenceCoil = myTracker->GetTool(6);
-	myTracker->LoadVirtualSROM(5, "I:/HMDUpdate.rom"); // oculusHMD rom in port 5
-    oculusHMD = myTracker->GetTool(5);
-	myTracker->LoadVirtualSROM(4, "I:/Projects/VRApp/8700449.rom"); // I: / Projects / VRApp / 8700449.rom I:/Projects/VRApp/8700449.rom
-	phantomTool = myTracker->GetTool(4);
-
-	ren->SetActiveCamera(vrCamera);
-
-	transformP2LInv->GetMatrix()->DeepCopy(p2l);
-	transformP2LInv->GetMatrix()->Invert();
-
-	cameraInvTransform->PostMultiply();
-	cameraInvTransform->Identity();
-	cameraInvTransform->Concatenate(transformP2LInv->GetMatrix());
-	//cameraInvTransform->Concatenate(oculusHMD->GetTransform());
-	//cameraInvTransform->Scale(1.f, -1.f, -1.f);
-	cameraInvTransform->Modified();
-	cameraInvTransform->Update();
-
-	//oculusHMD->GetTransform()->GetMatrix()->Invert();
-
-	cameraTransform->PostMultiply();
-	cameraTransform->Identity();
-	//cameraTransform->Concatenate(oculusHMD->GetTransform());
-	cameraTransform->Concatenate(transformP2L->GetMatrix());
-	cameraTransform->Modified();
-	//cameraTransform->Scale(1.f, -1.f, -1.f);
-	cameraTransform->Update();
-
-	double camPose[3];
-//	oculusHMD->GetTransform()->GetPosition(camPose);
-	
-	/*phantomTransform->PostMultiply();
-	phantomTransform->Identity();
-	phantomTransform->Concatenate(phantomToPhysicalTransform);
-	auto phantomToTracker = phantomTool->GetTransform();
-	phantomTool->GetTransform()->GetMatrix()->SetElement(0, 3, phantomTool->GetTransform()->GetMatrix()->GetElement(0, 3) / 1000);
-	phantomTool->GetTransform()->GetMatrix()->SetElement(1, 3, phantomTool->GetTransform()->GetMatrix()->GetElement(1, 3) / 1000);
-	phantomTool->GetTransform()->GetMatrix()->SetElement(2, 3, phantomTool->GetTransform()->GetMatrix()->GetElement(2, 3) / 1000);
-	phantomTransform->Concatenate(phantomTool->GetTransform());
-	//phantomTransform->Concatenate(oculusHMD->GetTransform());
-	phantomTransform->Concatenate(transformP2L->GetMatrix());
-	//phantomTransform->Scale(1.f, -1.f, -1.f);
-	phantomTransform->Modified();
-	
-	sphereTransform->PostMultiply();
-	sphereTransform->Identity();
-	sphereTransform->Concatenate(phantomTool->GetTransform());
-	sphereTransform->Concatenate(oculusHMD->GetTransform()->GetMatrix());
-
-	sphere->SetRadius(2.5);
-	sphereMapper->SetInputConnection(sphere->GetOutputPort());
-	sphereActor->SetMapper(sphereMapper.Get());
-	sphereActor->SetUserTransform(sphereTransform.Get());
-
-	reader->SetFileName("L2.vtk");
-	phantomMapper->SetInputConnection(reader->GetOutputPort());
-	phantomActor->SetMapper(phantomMapper.Get());
-	phantomActor->SetUserTransform(phantomTransform.Get());
-
-	vtkMatrix4x4 *hmdPose;
-	hmdPose = vtkMatrix4x4::New();
-	ren->SetActiveCamera(vrCamera.Get());
-
-	hmdPose->DeepCopy(cameraTransform->GetMatrix());
-	vrCamera->SetHMDPose(hmdPose);
-
-	ren->AddActor(phantomActor.Get());
-	ren->AddActor(sphereActor.Get());
-
-	double center_x = (matLeft.cols - intrinsic.at<double>(0, 2)) / ((matLeft.cols - 1) / 2.0) - 1.0;
-	double center_y = intrinsic.at<double>(1, 2) / ((matLeft.rows - 1.0) / 2.0) - 1.0;
-	double viewAngle = 2.0 * atan((matLeft.rows / 2.0) / intrinsic.at<double>(1, 1)) * 45.0 / atan(1.0);*/
-
-/*	ren->ResetCamera();
-	ren->GetActiveCamera()->SetViewAngle(viewAngle);
-	ren->GetActiveCamera()->SetPosition(0, 0, 0);
-	ren->GetActiveCamera()->SetViewUp(0, -1, 0);
-	ren->GetActiveCamera()->SetFocalPoint(0, 0, intrinsic.at<double>(1, 1));
-	ren->GetActiveCamera()->SetWindowCenter(center_x, center_y);
-	ren->GetActiveCamera()->SetClippingRange(0.01, 1000.01);
-	ren->GetActiveCamera()->SetParallelProjection(0);
-	ren->GetActiveCamera()->Modified();*/
-	
-	/*vrCamera->SetViewAngle(viewAngle);
-	vrCamera->SetPosition(0, 0, 0);
-	vrCamera->SetViewUp(0, -1, 0);
-	vrCamera->SetFocalPoint(0, 0, intrinsic.at<double>(1, 1));
-	vrCamera->SetWindowCenter(center_x, center_y);
-	vrCamera->SetClippingRange(0.01, 1000.01);
-	//vrCamera->SetPosition(camPose[0], camPose[1], camPose[2]);
-	vrCamera->SetParallelProjection(0);
-	vrCamera->Modified();
-	
-	// reset the camera according to visible actors
-	ren->ResetCameraClippingRange();
-
-	//qvtk->GetRenderWindow()->Render();
-	//vrWindow = dynamic_cast<vtkOpenVRRenderWindow*>(qvtk->GetRenderWindow());
 	vrWindow = dynamic_cast<vtkOpenVRRenderWindow*>(renWindow.Get());
-	vrWindow->AddRenderer(ren.Get());
 	vrWindow->SetTexturedBackground(true);
 	vrWindow->SetLeftBackgroundTexture(textureLeft);
+	vrWindow->AddRenderer(ren);
 
-	vrWindow->HMDPose(hmdPose);
-	vrWindow->UpdateHMDMatrixPose();
-
-	// reset the camera according to visible actors
 	ren->ResetCameraClippingRange();
-
-	//qvtk->GetRenderWindow()->Render();
-	vrWindow->Render();
-	renderAR = true;*/
+	vrWindow->Render();*/
 }
 
 //
@@ -1165,308 +676,137 @@ void mainWidget::updateTrackerInfo()
 {
   if (isTrackerInit)     /*!< Make sure the tracker is initialized. */
   {
-    myTracker->Update();   /*!< Update the tracking information */
-    ren->ResetCameraClippingRange();
+	  //myTracker->Update();   /*!< Update the tracking information */
+	  ren->ResetCameraClippingRange();
 
-    if (!referenceCoil->IsMissing() &&
-        !referenceCoil->IsOutOfView() &&
-        !referenceCoil->IsOutOfVolume())
-    {
-      /*!< update the US probe button */
-      trackerWidget->lightWidgets[0]->GreenOn();
-    }
-    else
-    {
-      trackerWidget->lightWidgets[0]->RedOn();
-    }
+	  trackerChannel->GetTrackedFrame(trackedFrame);
 
-    if (!oculusHMD->IsMissing() &&
-        !oculusHMD->IsOutOfView() &&
-        !oculusHMD->IsOutOfVolume())
-    {
-      /*!< update the US probe button */
-      trackerWidget->lightWidgets[1]->GreenOn();
-    }
-    else
-    {
-      trackerWidget->lightWidgets[1]->RedOn();
-    }
-	if (!phantomTool->IsMissing() &&
-		!phantomTool->IsOutOfView() &&
-		!phantomTool->IsOutOfVolume())
-	{  /*!< update the US probe button */
-		trackerWidget->lightWidgets[2]->GreenOn();
-	}
-	else
-	{
-		trackerWidget->lightWidgets[2]->RedOn();
-	}
+	  bool isProbeMatrixValid(false);
+	  vtkSmartPointer<vtkMatrix4x4> identityMatrix = vtkSmartPointer<vtkMatrix4x4>::New();
 
-	phantomTool->Update();
-	oculusHMD->Update();
-	//phantomTool->GetTransform()->Print(std::cerr);
-	//oculusHMD->GetTransform()->Print(std::cerr);
+	  repository->SetTransforms(trackedFrame);
+	  if (repository->GetTransform(probe2TrackerName, tProbe2Tracker, &isProbeMatrixValid) == PLUS_SUCCESS && isProbeMatrixValid)
+	  {
+		  trackerWidget->lightWidgets[0]->GreenOn();
+	  }
+	  else
+	  {
+		  trackerWidget->lightWidgets[0]->RedOn();
+	  }
 
-	// Get position of circle centroid
-	double posePosition[3];
-	posMatrix->GetPosition(posePosition);
+	  bool isCamMatrixValid(false);
+	  if (repository->GetTransform(camera2TrackerName, tCamera2Tracker, &isCamMatrixValid) == PLUS_SUCCESS && isCamMatrixValid)
+	  {
+		  trackerWidget->lightWidgets[1]->GreenOn();
+	  }
+	  else
+	  {
+		  trackerWidget->lightWidgets[1]->RedOn();
+	  }
 
-	cv::Mat objectPoints(1, 3, CV_64FC1);
-	objectPoints.at<double>(0, 0) = posePosition[0];
-	objectPoints.at<double>(0, 1) = posePosition[1];
-	objectPoints.at<double>(0, 2) = posePosition[2];
+	  // Get position of circle centroid
+	  /*double posePosition[3];
+	  posMatrix->GetPosition(posePosition);
 
-	// Project point
-	vector<Point2d> projectedPoints;
-	double xPrime = objectPoints.at<double>(0, 0) / objectPoints.at<double>(0, 2);
-	double yPrime = objectPoints.at<double>(0, 1) / objectPoints.at<double>(0, 2);
+	  cv::Mat objectPoints(1, 3, CV_64FC1);
+	  objectPoints.at<double>(0, 0) = posePosition[0];
+	  objectPoints.at<double>(0, 1) = posePosition[1];
+	  objectPoints.at<double>(0, 2) = posePosition[2];
 
-	double u = (leftIntrinsicParam[0][0] * xPrime) + leftIntrinsicParam[0][2];
-	double v = (leftIntrinsicParam[1][1] * yPrime) + leftIntrinsicParam[1][2];
-		
-	vector<Point2f> center(1);
-	center[0].x = u;
-	center[0].y = v;
-	ovrvisionProHandle.SetCameraExposure(22500);
+	  // Project point
+	  vector<Point2d> projectedPoints;
+	  double xPrime = objectPoints.at<double>(0, 0) / objectPoints.at<double>(0, 2);
+	  double yPrime = objectPoints.at<double>(0, 1) / objectPoints.at<double>(0, 2);
 
-	// Query the SDK for the latest frames
-	ovrvisionProHandle.PreStoreCamData(OVR::OV_CAMQT_DMSRMP);
+	  double u = (leftIntrinsicParam[0][0] * xPrime) + leftIntrinsicParam[0][2];
+	  double v = (leftIntrinsicParam[1][1] * yPrime) + leftIntrinsicParam[1][2];
 
-	// Grab Left and Right Images;
-	cv::Mat matLeft(ovrvisionProHandle.GetCamHeight(), ovrvisionProHandle.GetCamWidth(), CV_8UC4, ovrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_LEFT));
+	  vector<Point2f> center(1);
+	  center[0].x = u;
+	  center[0].y = v;
+	  ovrvisionProHandle.SetCameraExposure(22500);
 
-	cv::Mat undistorted;
-	undistort(matLeft, undistorted, intrinsic, distortion);
+	  // circle center
+	  circle(undistorted, center[0], 3, (0, 100, 100), -1, 8, 0);
 
-	// circle center
-	circle(undistorted, center[0], 3, (0, 100, 100), -1, 8, 0);
-		
-	// circle outline
-	circle(undistorted, center[0], 14, Scalar(100, 100, 100), 3, 8, 0);
+	  // circle outline
+	  circle(undistorted, center[0], 14, Scalar(100, 100, 100), 3, 8, 0);*/
 
-	// Convert From BGRA to RGB
-	cv::cvtColor(undistorted, rgbMatLeft, CV_BGRA2RGB);
+	  leftMixer->GetChannel()->GetTrackedFrame(leftMixerFrame);
+	  rightMixer->GetChannel()->GetTrackedFrame(rightMixerFrame);
 
-	// Flip Orientation for VTK
-	cv::flip(rgbMatLeft, finalMatLeft, 0);
-	cv::flip(rgbMatRight, finalMatRight, 0);
+	  vtkImageData *leftImage = leftMixerFrame.GetImageData()->GetImage();
+	  vtkImageData *rightImage = rightMixerFrame.GetImageData()->GetImage();
+	  int leftDims[3];
+	  int rightDims[3];
+	  leftImage->GetDimensions(leftDims);
+	  rightImage->GetDimensions(rightDims);
 
-	// Update 
-	imageImportLeft->Modified();
-	imageImportLeft->Update();
-	imageImportRight->Modified();
-	imageImportRight->Update();
+	  // Copy vtkImage to cv::Mat
+	  matLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3, leftImage->GetScalarPointer(0, 0, 0));
+	  matRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3, rightImage->GetScalarPointer(0, 0, 0));
 
-	textureLeft->Modified();
-	textureRight->Modified();
-	textureLeft->Update();
-	textureRight->Update();
+	  undistortedLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3);
+	  undistortedRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3);
 
-	vtkSmartPointer< vtkTransform >	phantomTransform = vtkSmartPointer< vtkTransform >::New();
-	vtkSmartPointer<vtkTransform> sphereTransform = vtkSmartPointer<vtkTransform>::New();
-	vtkSmartPointer<vtkSphereSource> sphere = vtkSmartPointer<vtkSphereSource>::New();
-	vtkSmartPointer<vtkPolyDataMapper> sphereMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-	vtkSmartPointer< vtkPolyDataReader > reader = vtkSmartPointer< vtkPolyDataReader >::New();
-	vtkSmartPointer< vtkPolyDataMapper > phantomMapper = vtkSmartPointer< vtkPolyDataMapper >::New();
+	  // Set cuda device
+	  //	cv::cuda::setDevice(0);
 
-	phantomTransform->PostMultiply();
-	phantomTransform->Identity();
-	phantomTransform->Concatenate(phantomToPhysicalTransform);
-	vtkSmartPointer<vtkMatrix4x4> phantomToTracker = vtkSmartPointer<vtkMatrix4x4>::New();
-	phantomToTracker->SetElement(0, 0, phantomTool->GetTransform()->GetMatrix()->GetElement(0, 0));
-	phantomToTracker->SetElement(0, 1, phantomTool->GetTransform()->GetMatrix()->GetElement(0, 1));
-	phantomToTracker->SetElement(0, 2, phantomTool->GetTransform()->GetMatrix()->GetElement(0, 2));
-	phantomToTracker->SetElement(0, 3, phantomTool->GetTransform()->GetMatrix()->GetElement(0, 3));
-	phantomToTracker->SetElement(1, 0, phantomTool->GetTransform()->GetMatrix()->GetElement(1, 0));
-	phantomToTracker->SetElement(1, 1, phantomTool->GetTransform()->GetMatrix()->GetElement(1, 1));
-	phantomToTracker->SetElement(1, 2, phantomTool->GetTransform()->GetMatrix()->GetElement(1, 2));
-	phantomToTracker->SetElement(1, 3, phantomTool->GetTransform()->GetMatrix()->GetElement(1, 3));
-	phantomToTracker->SetElement(2, 0, phantomTool->GetTransform()->GetMatrix()->GetElement(2, 0));
-	phantomToTracker->SetElement(2, 1, phantomTool->GetTransform()->GetMatrix()->GetElement(2, 1));
-	phantomToTracker->SetElement(2, 2, phantomTool->GetTransform()->GetMatrix()->GetElement(2, 2));
-	phantomToTracker->SetElement(2, 3, phantomTool->GetTransform()->GetMatrix()->GetElement(2, 3));
-	phantomToTracker->SetElement(3, 0, phantomTool->GetTransform()->GetMatrix()->GetElement(3, 0));
-	phantomToTracker->SetElement(3, 1, phantomTool->GetTransform()->GetMatrix()->GetElement(3, 1));
-	phantomToTracker->SetElement(3, 2, phantomTool->GetTransform()->GetMatrix()->GetElement(3, 2));
-	phantomToTracker->SetElement(3, 3, phantomTool->GetTransform()->GetMatrix()->GetElement(3, 3));
+	  //	cudaLeftImg.create(leftDims[1], leftDims[0], CV_8UC3);
+	  //	cudaRightImg.create(rightDims[1], rightDims[0], CV_8UC3);
+	  //	cudaLeftImgUND.create(leftDims[1], leftDims[0], CV_8UC3);
+	  //	cudaRightImgUND.create(rightDims[1], rightDims[0], CV_8UC3);
 
-	vtkSmartPointer<vtkMatrix4x4> trackerToOculus = vtkSmartPointer<vtkMatrix4x4>::New();
-	oculusHMD->Update();
+	  //	xmapLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3);
+	  //	ymapLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3);
+	  //	xmapRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3);
+	  //	ymapRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3);
 
-	trackerToOculus->SetElement(0, 0, oculusHMD->GetTransform()->GetMatrix()->GetElement(0, 0));
-	trackerToOculus->SetElement(0, 1, oculusHMD->GetTransform()->GetMatrix()->GetElement(0, 1));
-	trackerToOculus->SetElement(0, 2, oculusHMD->GetTransform()->GetMatrix()->GetElement(0, 2));
-	trackerToOculus->SetElement(0, 3, oculusHMD->GetTransform()->GetMatrix()->GetElement(0, 3));
-	trackerToOculus->SetElement(1, 0, oculusHMD->GetTransform()->GetMatrix()->GetElement(1, 0));
-	trackerToOculus->SetElement(1, 1, oculusHMD->GetTransform()->GetMatrix()->GetElement(1, 1));
-	trackerToOculus->SetElement(1, 2, oculusHMD->GetTransform()->GetMatrix()->GetElement(1, 2));
-	trackerToOculus->SetElement(1, 3, oculusHMD->GetTransform()->GetMatrix()->GetElement(1, 3));
-	trackerToOculus->SetElement(2, 0, oculusHMD->GetTransform()->GetMatrix()->GetElement(2, 0));
-	trackerToOculus->SetElement(2, 1, oculusHMD->GetTransform()->GetMatrix()->GetElement(2, 1));
-	trackerToOculus->SetElement(2, 2, oculusHMD->GetTransform()->GetMatrix()->GetElement(2, 2));
-	trackerToOculus->SetElement(2, 3, oculusHMD->GetTransform()->GetMatrix()->GetElement(2, 3));
-	trackerToOculus->SetElement(3, 0, oculusHMD->GetTransform()->GetMatrix()->GetElement(3, 0));
-	trackerToOculus->SetElement(3, 1, oculusHMD->GetTransform()->GetMatrix()->GetElement(3, 1));
-	trackerToOculus->SetElement(3, 2, oculusHMD->GetTransform()->GetMatrix()->GetElement(3, 2));
-	trackerToOculus->SetElement(3, 3, oculusHMD->GetTransform()->GetMatrix()->GetElement(3, 3));
+	  // Perform undistortion transformation
+	  /*	cv::initUndistortRectifyMap(intrinsic, distortion, cv::Mat::eye(3, 3, CV_32F),
+	  intrinsic, cv::Size(leftDims[0], leftDims[1]), CV_32F, xmapLeft, ymapLeft);
 
-	trackerToOculus->Invert();
-	phantomTransform->Concatenate(phantomToTracker);
-//	phantomTransform->Concatenate(trackerToOculus);
-//	phantomTransform->Concatenate(transformP2L->GetMatrix());
-	//phantomTransform->Scale(1.f, -1.f, -1.f);
-//	phantomTransform->Scale(1.f, 1.f, -1.f);
-	phantomTransform->Modified();
-	phantomTransform->Update();
+	  cv::initUndistortRectifyMap(intrinsic, distortion, cv::Mat::eye(3, 3, CV_32F),
+	  intrinsic, cv::Size(rightDims[0], rightDims[1]), CV_32F, xmapRight, ymapRight);
 
-	vtkSmartPointer<vtkTransform> finalPhantomTransform = vtkSmartPointer<vtkTransform>::New();
-	finalPhantomTransform->GetMatrix()->SetElement(0, 0, phantomTransform->GetMatrix()->GetElement(0, 0));
-	finalPhantomTransform->GetMatrix()->SetElement(0, 1, phantomTransform->GetMatrix()->GetElement(0, 1));
-	finalPhantomTransform->GetMatrix()->SetElement(0, 2, phantomTransform->GetMatrix()->GetElement(0, 2));
-	finalPhantomTransform->GetMatrix()->SetElement(0, 3, (phantomTransform->GetMatrix()->GetElement(0, 3)));
-	finalPhantomTransform->GetMatrix()->SetElement(1, 0, phantomTransform->GetMatrix()->GetElement(1, 0));
-	finalPhantomTransform->GetMatrix()->SetElement(1, 1, phantomTransform->GetMatrix()->GetElement(1, 1));
-	finalPhantomTransform->GetMatrix()->SetElement(1, 2, phantomTransform->GetMatrix()->GetElement(1, 2));
-	finalPhantomTransform->GetMatrix()->SetElement(1, 3, (phantomTransform->GetMatrix()->GetElement(1, 3)*-2)); // * -2
-	finalPhantomTransform->GetMatrix()->SetElement(2, 0, phantomTransform->GetMatrix()->GetElement(2, 0));
-	finalPhantomTransform->GetMatrix()->SetElement(2, 1, phantomTransform->GetMatrix()->GetElement(2, 1));
-	finalPhantomTransform->GetMatrix()->SetElement(2, 2, phantomTransform->GetMatrix()->GetElement(2, 2));
-	finalPhantomTransform->GetMatrix()->SetElement(2, 3, (phantomTransform->GetMatrix()->GetElement(2, 3)/10)); // /10
-	finalPhantomTransform->GetMatrix()->SetElement(3, 0, phantomTransform->GetMatrix()->GetElement(3, 0));
-	finalPhantomTransform->GetMatrix()->SetElement(3, 1, phantomTransform->GetMatrix()->GetElement(3, 1));
-	finalPhantomTransform->GetMatrix()->SetElement(3, 2, phantomTransform->GetMatrix()->GetElement(3, 2));
-	finalPhantomTransform->GetMatrix()->SetElement(3, 3, phantomTransform->GetMatrix()->GetElement(3, 3));
+	  xmapLeftGPU.upload(xmapLeft);
+	  ymapLeftGPU.upload(ymapLeft);
+	  xmapRightGPU.upload(xmapRight);
+	  ymapRightGPU.upload(ymapRight);
 
-	sphereTransform->PostMultiply();
-	sphereTransform->Identity();
-	//sphereTransform->Concatenate(phantomTool->GetTransform());
-//	sphereTransform->Concatenate(oculusHMD->GetTransform()->GetMatrix());
+	  cudaLeftImg.upload(matLeft);
+	  cudaRightImg.upload(matRight);
 
-	sphere->SetRadius(2.5);
-	sphereMapper->SetInputConnection(sphere->GetOutputPort());
-	sphereActor->SetMapper(sphereMapper.Get());
-	sphereActor->SetUserTransform(sphereTransform.Get());
+	  cv::cuda::remap(cudaLeftImg, cudaLeftImgUND, xmapLeftGPU, ymapLeftGPU, CV_INTER_LINEAR, IPL_BORDER_CONSTANT);
+	  cv::cuda::remap(cudaRightImg, cudaRightImgUND, xmapRightGPU, ymapRightGPU, CV_INTER_LINEAR, IPL_BORDER_CONSTANT);
 
-	reader->SetFileName("L2.vtk");
-	phantomMapper->SetInputConnection(reader->GetOutputPort());
-	phantomActor->SetMapper(phantomMapper.Get());
-	phantomActor->SetUserTransform(finalPhantomTransform);
+	  cudaLeftImgUND.download(undistortedLeft);
+	  cudaRightImgUND.download(undistortedRight);*/
 
-	ren->AddActor(phantomActor.Get());
-	ren->AddActor(sphereActor.Get());
 
-	// reset the camera according to visible actors
-	ren->ResetCameraClippingRange();
+	  undistort(matLeft, finalMatLeft, intrinsic, distortion);
+	  undistort(matRight, finalMatRight, intrinsic, distortion);
 
-	vrWindow = dynamic_cast<vtkOpenVRRenderWindow*>(renWindow.Get());
-	vrWindow->AddRenderer(ren.Get());
-	vrWindow->SetTexturedBackground(true);
-	vrWindow->SetLeftBackgroundTexture(textureLeft);
+	  //cv::flip(matLeft, finalMatLeft, 0);
+	  //cv::flip(matRight, finalMatRight, 0);
 
-	vtkSmartPointer<vtkTransform> camTransform = vtkSmartPointer<vtkTransform>::New();
-	vtkSmartPointer<vtkTransform> camInvTransform = vtkSmartPointer<vtkTransform>::New();
-	camInvTransform->PostMultiply();
-	camInvTransform->Identity();
-	camInvTransform->Concatenate(transformP2LInv->GetMatrix());
-	camInvTransform->Concatenate(oculusHMD->GetTransform());
-	camInvTransform->Modified();
-	camInvTransform->Update();
+	  // Update 
+	  imageImportLeft->Modified();
+	  imageImportLeft->Update();
+	  imageImportRight->Modified();
+	  imageImportRight->Update();
 
-	camTransform->PostMultiply();
-	camTransform->Identity();
-	camTransform->Concatenate(trackerToOculus);
-	camTransform->Concatenate(transformP2L->GetMatrix());
-	camTransform->Modified();
-	camTransform->Update();
+	  textureLeft->Modified();
+	  textureRight->Modified();
+	  textureLeft->Update();
+	  textureRight->Update();
 
-	vtkMatrix4x4 *hmdPose;
-	hmdPose = vtkMatrix4x4::New();
-	ren->SetActiveCamera(vrCamera.Get());
+	  // reset the camera according to visible actors
+	  ren->ResetCameraClippingRange();
 
-	hmdPose->DeepCopy(camTransform->GetMatrix());
-
-	vtkMatrix4x4 *hmdInvPose;
-	hmdInvPose = vtkMatrix4x4::New();
-	hmdInvPose->DeepCopy(camInvTransform->GetMatrix());
-
-	//vrCamera->SetHMDPose(hmdPose);
-	//vrWindow->HMDPose(hmdInvPose);
-	//vrWindow->UpdateHMDMatrixPose();
-
-/*	double center_x = (matLeft.cols - intrinsic.at<double>(0, 2)) / ((matLeft.cols - 1) / 2.0) - 1.0;
-	double center_y = intrinsic.at<double>(1, 2) / ((matLeft.rows - 1.0) / 2.0) - 1.0;
-	double viewAngle = 2.0 * atan((matLeft.rows / 2.0) / intrinsic.at<double>(1, 1)) * 45.0 / atan(1.0);
-
-	vrCamera->SetViewAngle(viewAngle);
-	vrCamera->SetPosition(0, 0, 0);
-	vrCamera->SetViewUp(0, -1, 0);
-	vrCamera->SetFocalPoint(0, 0, intrinsic.at<double>(1, 1));
-	vrCamera->SetWindowCenter(center_x, center_y);
-	vrCamera->SetClippingRange(0.01, 1000.01);
-	vrCamera->SetParallelProjection(0);
-	vrCamera->Modified();
-	*/
-	// reset the camera according to visible actors
-	ren->ResetCameraClippingRange();
-
-	//qvtk->GetRenderWindow()->Render();
-	vrWindow->Render();
-
-	renderAR = true;
-
-	/*vtkMatrix4x4 *hmdPose;
-	hmdPose = vtkMatrix4x4::New();
-	hmdPose->DeepCopy(cameraTransform->GetMatrix());
-
-	vtkMatrix4x4 *hmdPoseInv;
-	hmdPoseInv = vtkMatrix4x4::New();
-	hmdPoseInv->DeepCopy(cameraInvTransform->GetMatrix());
-	*/
-	//vrCamera->SetHMDPose(hmdPose);
-	//vrWindow->HMDPose(hmdPose);
-	//vrWindow->UpdateHMDMatrixPose();
-
-	//vrCamera->SetLeftEye(1);
-	//vrCamera->Modified();
-
-	/*double center_x = (matLeft.cols - intrinsic.at<double>(0, 2)) / ((matLeft.cols - 1) / 2.0) - 1.0;
-	double center_y = intrinsic.at<double>(1, 2) / ((matLeft.rows - 1.0) / 2.0) - 1.0;
-	double viewAngle = 2.0 * atan((matLeft.rows / 2.0) / intrinsic.at<double>(1, 1)) * 45.0 / atan(1.0);
-
-	ren->ResetCamera();
-	vrCamera->SetViewAngle(viewAngle);
-	vrCamera->SetPosition(0, 0, 0);
-	vrCamera->SetViewUp(0, -1, 0);
-	vrCamera->SetFocalPoint(0, 0, intrinsic.at<double>(1, 1));
-	vrCamera->SetWindowCenter(center_x, center_y);
-	vrCamera->SetClippingRange(0.01, 1000.01);
-	//vrCamera->SetPosition(camPose[0], camPose[1], camPose[2]);
-	vrCamera->SetParallelProjection(0);
-	vrCamera->Modified();
-	*/
-	//ren->ResetCameraClippingRange();
-
-//	qvtk->GetRenderWindow()->Render();
-
-/*	phantomTransform->PostMultiply();
-	phantomTransform->Identity();
-	phantomTransform->Concatenate(phantomToPhysicalTransform);
-	auto phantomToTracker = phantomTool->GetTransform();
-	phantomTool->GetTransform()->GetMatrix()->SetElement(0, 3, phantomTool->GetTransform()->GetMatrix()->GetElement(0, 3) / 1000);
-	phantomTool->GetTransform()->GetMatrix()->SetElement(1, 3, phantomTool->GetTransform()->GetMatrix()->GetElement(1, 3) / 1000);
-	phantomTool->GetTransform()->GetMatrix()->SetElement(2, 3, phantomTool->GetTransform()->GetMatrix()->GetElement(2, 3) / 1000);
-	phantomTransform->Concatenate(phantomToTracker);
-	//phantomTransform->Concatenate(oculusHMD->GetTransform());
-	phantomTransform->Concatenate(transformP2L->GetMatrix());
-	//phantomTransform->Scale(1.f, -1.f, -1.f);
-	phantomTransform->Modified();
-
-	reader->SetFileName("L2.vtk");
-	phantomMapper->SetInputConnection(reader->GetOutputPort());
-	phantomActor->SetMapper(phantomMapper.Get());
-	phantomActor->SetUserTransform(phantomTransform.Get());*/
-
-	vrWindow->Render();
+	  vrWindow->Render();
+	  renWindow->Render();
+	  renderAR = true;
   }
 }
 
@@ -1478,63 +818,189 @@ void mainWidget::updateTrackerInfo()
 */
 void mainWidget::startTrackerSlot(bool checked)
 {
-  if (checked)
-  {
-    /*!
-    * Check if the tracker is initialized.  If not, initialize it here.
-    */
-    if (!isTrackerInit)
-    {
-      myTracker->SetBaudRate(115200); /*!< Set the baud rate sufficiently high. */
+	if (checked)
+	{
+		/*!
+		* Check if the tracker is initialized.  If not, initialize it here.
+		*/
+		if (!isTrackerInit)
+		{
+			// Get tracker
+			if (dataCollector->GetDevice(trackerDevice, "TrackerDevice") != PLUS_SUCCESS)
+			{
+				LOG_ERROR("Unable to locate the device with ID = \"TrackerDevice\". Check config file.");
+				exit;
+			}
 
-      statusBar()->showMessage(tr("Tracking system NOT initialized."), 5000);
-      if (myTracker->Probe())  /*!< Find the tracker. */
-      {
-        statusBar()->showMessage("Tracker Initialized", 5000);
-        isTrackerInit = true;
-      }
-      else
-      {
-        statusBar()->showMessage("Tracker Initialization FAILED", 5000);
-        isTrackerInit = false;
-        trackerButton->setChecked(false);
-        //        trackerButton->toggle();
-      }
-    }
+			// Get Ovrvision Pro device
+			if (dataCollector->GetDevice(ovrDevice, "VideoDevice") != PLUS_SUCCESS)
+			{
+				LOG_ERROR("Unable to locate the device with ID = \"VideoDevice\". Check config file.");
+				exit;
+			}
 
-    /*!
-    * If tracker is initialized, start tracking.
-    */
-    if (isTrackerInit)
-    {
+			// Get virtual mixer
+			if (dataCollector->GetDevice(leftMixerDevice, "LeftTrackedVideoDevice") != PLUS_SUCCESS)
+			{
+				LOG_ERROR("Unable to locate the device with ID = \"LeftTrackedVideoDevice\". Check config file.");
+				exit;
+			}
 
-      statusBar()->showMessage(tr("Tracking started."), 5000);
-      myTracker->StartTracking();
+			// Get virtual mixer
+			if (dataCollector->GetDevice(rightMixerDevice, "RightTrackedVideoDevice") != PLUS_SUCCESS)
+			{
+				LOG_ERROR("Unable to locate the device with ID = \"RightTrackedVideoDevice\". Check config file.");
+				exit;
 
-      checkToolPorts();
+			}
+			ovrVideo = dynamic_cast<vtkPlusOvrvisionProVideoSource *>(ovrDevice);
+			ndiTracker = dynamic_cast<vtkPlusNDITracker *>(trackerDevice);
+			leftMixer = dynamic_cast<vtkPlusVirtualMixer *>(leftMixerDevice);
+			rightMixer = dynamic_cast<vtkPlusVirtualMixer *>(rightMixerDevice);
 
-      //trackerTimer->start( 0 ); /*!< Update the tracker as quickly as we can. */
-      trackerTimer->start(35); /*!< The vtk pipeline takes about 15msec, so this is roughly 20 FPS. */
-    }
-  }
-  else
-  {
-    /*! Bottom is un-toggled. */
-    if (isTrackerInit)
-    {
-      trackerTimer->stop();
-      myTracker->StopTracking();
+			if (ndiTracker == NULL)
+			{
+				LOG_ERROR("Tracking device is not NDI Polaris/Aurora. Could not connect.");
+				exit(EXIT_FAILURE);
+			}
 
-      /*!
-      * Turn all the light widgets to blue.
-      */
-      for (int i = 0; i < 4; i++)
-      {
-        lightWidgets[i]->BlueOn();
-      }
-      statusBar()->showMessage(tr("stopping tracker"), 5000);
-    }
-  }
+			// Connect to devices
+			std::cout << "Connecting to NDI Polaris through COM" << ndiTracker->GetSerialPort();
+			if (dataCollector->Connect() != PLUS_SUCCESS)
+			{
+				std::cout << ".................... [FAILED]" << std::endl;
+				LOG_ERROR("Failed to connect to devices!");
+				exit;
+			}
+
+			if (dataCollector->Start() != PLUS_SUCCESS)
+			{
+				LOG_ERROR("Failed to connect to devices!");
+				exit;
+			}
+			std::cout << ".................... [OK]" << std::endl;
+
+			if (repository->ReadConfiguration(configRootElement) != PLUS_SUCCESS)
+			{
+				LOG_ERROR("Configuration incorrect for vtkPlusTransformRepository.");
+				exit(EXIT_FAILURE);
+			}
+
+			if (ndiTracker->GetOutputChannelByName(trackerChannel, "TrackerStream") != PLUS_SUCCESS)
+			{
+				LOG_ERROR("Unable to locate the channel with Id=\"TrackerStream\". Check config file.");
+				exit(EXIT_FAILURE);
+			}
+
+			if (ovrDevice->GetOutputChannelByName(leftVideoChannel, "LeftVideoStream") != PLUS_SUCCESS)
+			{
+				LOG_ERROR("Unable to locate the channel with Id=\"OvrVideoStream\". Check config file.");
+				exit(EXIT_FAILURE);
+			}
+
+			if (ovrDevice->GetOutputChannelByName(rightVideoChannel, "RightVideoStream") != PLUS_SUCCESS)
+			{
+				LOG_ERROR("Unable to locate the channel with Id=\"OvrVideoStream\". Check config file.");
+				exit(EXIT_FAILURE);
+			}
+
+			leftVideoChannel->GetTrackedFrame(leftVideoFrame);
+			rightVideoChannel->GetTrackedFrame(rightVideoFrame);
+			trackerChannel->GetTrackedFrame(trackedFrame);
+			leftMixer->GetChannel()->GetTrackedFrame(leftMixerFrame);
+			rightMixer->GetChannel()->GetTrackedFrame(rightMixerFrame);
+
+			vtkImageData *leftImage = leftMixerFrame.GetImageData()->GetImage();
+			vtkImageData *rightImage = rightMixerFrame.GetImageData()->GetImage();
+			int leftDims[3];
+			int rightDims[3];
+			leftImage->GetDimensions(leftDims);
+			rightImage->GetDimensions(rightDims);
+
+			// Copy vtkImage to cv::Mat
+			matLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3, leftImage->GetScalarPointer(0, 0, 0));
+			matRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3, rightImage->GetScalarPointer(0, 0, 0));
+
+			undistortedLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3);
+			undistortedRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3);
+
+			undistort(matLeft, finalMatLeft, intrinsic, distortion);
+			undistort(matRight, finalMatRight, intrinsic, distortion);
+
+			// Flip image for vtk
+			//cv::flip(undistortedLeft, finalMatLeft, 0);
+			//cv::flip(undistortedRight, finalMatRight, 0);
+
+			// Convert image from opencv to vtk
+			imageImportLeft->SetDataSpacing(1, 1, 1);
+			imageImportLeft->SetDataOrigin(0, 0, 0);
+			imageImportLeft->SetWholeExtent(0, finalMatLeft.size().width - 1, 0, finalMatLeft.size().height - 1, 0, 0);
+			imageImportLeft->SetDataExtentToWholeExtent();
+			imageImportLeft->SetDataScalarTypeToUnsignedChar();
+			imageImportLeft->SetNumberOfScalarComponents(finalMatLeft.channels());
+			imageImportLeft->SetImportVoidPointer(finalMatLeft.data);
+			imageImportLeft->Update();
+
+			imageImportRight->SetDataSpacing(1, 1, 1);
+			imageImportRight->SetDataOrigin(0, 0, 0);
+			imageImportRight->SetWholeExtent(0, finalMatRight.size().width - 1, 0, finalMatRight.size().height - 1, 0, 0);
+			imageImportRight->SetDataExtentToWholeExtent();
+			imageImportRight->SetDataScalarTypeToUnsignedChar();
+			imageImportRight->SetNumberOfScalarComponents(finalMatRight.channels());
+			imageImportRight->SetImportVoidPointer(finalMatRight.data);
+			imageImportRight->Update();
+
+			textureLeft->SetInputConnection(imageImportLeft->GetOutputPort());
+			textureRight->SetInputConnection(imageImportRight->GetOutputPort());
+
+			// left eye point to line
+			double p2l[16] = { 0.0677294484076749, -0.992989179048552, -0.0968773044158076, -61.6285338697333,
+				0.737296753348973, 0.11523277439025, -0.665668765383645, -14.6388968911687,
+				0.672165321419851, -0.0263419437173227, 0.739932350071099, -4.60575695614759, 0, 0, 0, 1 };
+
+			vrWindow = dynamic_cast<vtkOpenVRRenderWindow*>(renWindow.Get());
+			vrWindow->SetTexturedBackground(true);
+			vrWindow->SetLeftBackgroundTexture(textureLeft);
+			vrWindow->SetRightBackgroundTexture(textureRight);
+			vrWindow->AddRenderer(ren);
+
+			ren->ResetCameraClippingRange();
+			vrWindow->Render();
+
+			isTrackerInit = true;
+		}
+
+		/*!
+		* If tracker is initialized, start tracking.
+		*/
+		if (isTrackerInit)
+		{
+			statusBar()->showMessage(tr("Tracking started."), 5000);
+
+			checkToolPorts();
+
+			//trackerTimer->start( 0 ); /*!< Update the tracker as quickly as we can. */
+			trackerTimer->start(35); /*!< The vtk pipeline takes about 15msec, so this is roughly 20 FPS. */
+		}
+	}
+	else
+	{
+		/*! Bottom is un-toggled. */
+		if (isTrackerInit)
+		{
+			trackerTimer->stop();
+			dataCollector->Stop();
+
+			/*!
+			* Turn all the light widgets to blue.
+			*/
+			for (int i = 0; i < 4; i++)
+			{
+				lightWidgets[i]->BlueOn();
+			}
+			statusBar()->showMessage(tr("stopping tracker"), 5000);
+		}
+	}
 }
 
 void mainWidget::createActions()
@@ -1618,43 +1084,6 @@ void mainWidget::createToolInformation()
 	toolInfo->setWidget(mainFrame);
 	vlayout->addWidget(dataTable);
 
-}
-
-void mainWidget::pivotCalibration(bool checked)
-{
-  if (checked)
-  {
-    std::cerr << "checked" << std::endl;
-
-    double m[16] = { 1, 0, 0, 0,
-                     0, 1, 0, 0,
-                     0, 0, 1, 0,
-                     0, 0, 0, 1
-                   };
-
-    /*!
-    * Reset the calibration matrix associated with the DRB each time.
-    */
-    vtkSmartPointer< vtkMatrix4x4 > matrix =
-      vtkSmartPointer< vtkMatrix4x4 >::New();
-    matrix->DeepCopy(m);
-    referenceCoil->SetCalibrationMatrix(matrix);
-    referenceCoil->InitializeToolTipCalibration();
-    referenceCoil->SetCollectToolTipCalibrationData(1);
-  }
-  else
-  {
-    /*!
-    * Compute the calibration after the toggle button is being released,
-    * and update the GUI to report the RMS.
-    */
-    std::cerr << "not checked" << std::endl;
-    referenceCoil->SetCollectToolTipCalibrationData(0);
-    QString tempString;
-    double value = referenceCoil->DoToolTipCalibration();
-    tempString.setNum(referenceCoil->DoToolTipCalibration());
-    stylusTipRMS->setText(tempString);
-  }
 }
 
 /*!
@@ -1799,8 +1228,6 @@ void mainWidget::createControlDock()
 
 	connect(trackerWidget->collectPoses, SIGNAL(clicked()), this, SLOT(collectPose()));
 
-	connect(trackerWidget->projectionError, SIGNAL(clicked()), this, SLOT(calculateProjectionError()));
-
     // Calibration widget
     QDockWidget* stylusDock = new QDockWidget(tr("Stylus tip calibration"), this);
     stylusDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
@@ -1819,19 +1246,6 @@ void mainWidget::createControlDock()
     frame->setLayout(vl);
     stylusDock->setWidget(frame);
 
-    QPushButton* pivotButton = new QPushButton(tr("Pivot"), this);
-    pivotButton->setPalette(QPalette(Qt::blue));
-    pivotButton->setAutoFillBackground(true);
-    pivotButton->setCheckable(true);
-    vl->addWidget(pivotButton);
-
-    /*!
-    * Connect the button to the actual function call to do the
-    * math.
-    */
-    connect(pivotButton, SIGNAL(toggled(bool)),
-            this, SLOT(pivotCalibration(bool)));
-
     QString tempString;
     tempString.setNum(0.0);
 
@@ -1848,298 +1262,286 @@ void mainWidget::createControlDock()
 void mainWidget::getTransform()
 {
 	if (poseCenters.size() <= 15)
-  {
-    // perform quaternion averaging here
-    bool averaged = false;
-    int nSamples = 100;
-    Matrix<double> DRB(7, nSamples);
-    double pos[3], ori[4];
-    Matrix<double> q(4, 1), aa(4, 1), q7;
+	{
+		// perform quaternion averaging here
+		bool averaged = false;
+		int nSamples = 100;
+		Matrix<double> DRB(7, nSamples);
+		double pos[3], ori[4];
+		Matrix<double> q(4, 1), aa(4, 1), q7;
 
-    vtkSmartPointer< vtkTransform > Transform =
-      vtkSmartPointer< vtkTransform >::New();
-    Transform->PostMultiply();
+		vtkSmartPointer< vtkTransform > Transform =
+			vtkSmartPointer< vtkTransform >::New();
+		Transform->PostMultiply();
 
-    for (int j = 0; j < nSamples; j++)
-    {
-      isProbeVisible = isOculusVisible = false;
-      while (!(isProbeVisible && isOculusVisible))
-      {
-        myTracker->Update();
-        if (!referenceCoil->IsMissing() && !referenceCoil->IsOutOfView() && !referenceCoil->IsOutOfVolume())
-        {
-          isProbeVisible = true;
-        }
-        if (!oculusHMD->IsMissing() && !oculusHMD->IsOutOfView() && !oculusHMD->IsOutOfVolume())
-        {
-          isOculusVisible = true;
-        }
-      }
-      Transform->Identity();
-      Transform->Concatenate(referenceCoil->GetTransform());
-      Transform->Concatenate(oculusHMD->GetTransform()->GetLinearInverse());
-      Transform->Modified();
+		for (int j = 0; j < nSamples; j++)
+		{
+			bool isMatrixValid(false);
+			repository->GetTransform(PlusTransformName("PointerTip", "Camera"), tTip2Camera, &isMatrixValid);
 
-      Transform->GetOrientationWXYZ(ori);
-      Transform->GetPosition(pos);
+			Transform->Identity();
+			Transform->Concatenate(tTip2Camera);
+			Transform->Modified();
 
-      for (int k = 0; k < 4; k++)
-      {
-        aa[k][0] = ori[k];
-      }
+			Transform->GetOrientationWXYZ(ori);
+			Transform->GetPosition(pos);
 
-      // vtk the angle is in degree
-      aa[0][0] = aa[0][0] / 45.0 * atan(1.0);
+			for (int k = 0; k < 4; k++)
+			{
+				aa[k][0] = ori[k];
+			}
 
-      aa2q(aa, q);
-      DRB[0][j] = q[0][0];
-      DRB[1][j] = q[1][0];
-      DRB[2][j] = q[2][0];
-      DRB[3][j] = q[3][0];
-      DRB[4][j] = pos[0];
-      DRB[5][j] = pos[1];
-      DRB[6][j] = pos[2];
-    }
+			// vtk the angle is in degree
+			aa[0][0] = aa[0][0] / 45.0 * atan(1.0);
 
-    q7avg(DRB, q7); // now q7 is the averaged quaternion
-    for (int j = 0; j < 4; j++)
-    {
-      q[j][0] = q7[j][0];
-    }
+			aa2q(aa, q);
+			DRB[0][j] = q[0][0];
+			DRB[1][j] = q[1][0];
+			DRB[2][j] = q[2][0];
+			DRB[3][j] = q[3][0];
+			DRB[4][j] = pos[0];
+			DRB[5][j] = pos[1];
+			DRB[6][j] = pos[2];
+		}
 
-    q2aa(q, aa);
-    aa[0][0] = aa[0][0] * 45.0 / atan(1.0);
+		q7avg(DRB, q7); // now q7 is the averaged quaternion
+		for (int j = 0; j < 4; j++)
+		{
+			q[j][0] = q7[j][0];
+		}
 
-    Transform->Identity();
-    Transform->PostMultiply();
-    Transform->RotateWXYZ(aa[0][0], aa[1][0], aa[2][0], aa[3][0]);
-    Transform->Translate(q7[4][0], q7[5][0], q7[6][0]);
-    Transform->Modified();
-    averaged = true;
+		q2aa(q, aa);
+		aa[0][0] = aa[0][0] * 45.0 / atan(1.0);
 
-    double position[3];
-    Transform->GetPosition(position);
-    X[0][poseCenters.size() - 1] = position[0];
-    X[1][poseCenters.size() - 1] = position[1];
-    X[2][poseCenters.size() - 1] = position[2];
+		Transform->Identity();
+		Transform->PostMultiply();
+		Transform->RotateWXYZ(aa[0][0], aa[1][0], aa[2][0], aa[3][0]);
+		Transform->Translate(q7[4][0], q7[5][0], q7[6][0]);
+		Transform->Modified();
+		averaged = true;
 
-    // Origin matrix - always 0,0,0
-    origin[0][poseCenters.size() - 1] = 0;
-    origin[1][poseCenters.size() - 1] = 0;
-    origin[2][poseCenters.size() - 1] = 0;
+		double position[3];
+		Transform->GetPosition(position);
+		X[0][poseCenters.size() - 1] = position[0];
+		X[1][poseCenters.size() - 1] = position[1];
+		X[2][poseCenters.size() - 1] = position[2];
 
-    Matrix<double> pixel(3, 1);
-    pixel[0][0] = poseCenters[poseCenters.size() - 1].x;
-    pixel[1][0] = poseCenters[poseCenters.size() - 1].y;
-    pixel[2][0] = 1;
+		// Origin matrix - always 0,0,0
+		origin[0][poseCenters.size() - 1] = 0;
+		origin[1][poseCenters.size() - 1] = 0;
+		origin[2][poseCenters.size() - 1] = 0;
 
-    // Find the inverse of the camera intrinsic param matrix
-    Matrix<double> leftIntrinsicInv(3, 3);
-    invm3x3(leftIntrinsicParam, leftIntrinsicInv);
+		Matrix<double> pixel(3, 1);
+		pixel[0][0] = poseCenters[poseCenters.size() - 1].x;
+		pixel[1][0] = poseCenters[poseCenters.size() - 1].y;
+		pixel[2][0] = 1;
 
-    // Calculate D matrix by multiplying the inverse of the
-    // intrinsic param matrix by the pixel matrix
-    Matrix<double> dMatrix(3, 1);
-    dMatrix = leftIntrinsicInv * pixel;
+		// Find the inverse of the camera intrinsic param matrix
+		Matrix<double> leftIntrinsicInv(3, 3);
+		invm3x3(leftIntrinsicParam, leftIntrinsicInv);
 
-	// Multiply by inverse of distortion coefficients
-	vector<Point2d> pointCoords(1);
-	vector<Point2d> undistortedPoints;
-	pointCoords[0].x = poseCenters[poseCenters.size() - 1].x;
-	pointCoords[0].y = poseCenters[poseCenters.size() - 1].y;
+		// Calculate D matrix by multiplying the inverse of the
+		// intrinsic param matrix by the pixel matrix
+		Matrix<double> dMatrix(3, 1);
+		dMatrix = leftIntrinsicInv * pixel;
 
-    // Normalize the D matrix
-    double sum1;
-    sum1 = (dMatrix[0][0] * dMatrix[0][0]) + (dMatrix[1][0] * dMatrix[1][0]) + (dMatrix[2][0] * dMatrix[2][0]);
-    dNormalized[0][poseCenters.size() - 1] = dMatrix[0][0] / sqrt(sum1);
-    dNormalized[1][poseCenters.size() - 1] = dMatrix[1][0] / sqrt(sum1);
-    dNormalized[2][poseCenters.size() - 1] = dMatrix[2][0] / sqrt(sum1);
+		// Multiply by inverse of distortion coefficients
+		vector<Point2d> pointCoords(1);
+		vector<Point2d> undistortedPoints;
+		pointCoords[0].x = poseCenters[poseCenters.size() - 1].x;
+		pointCoords[0].y = poseCenters[poseCenters.size() - 1].y;
 
-    // Send data to table
-    int numRows = dataTable->verticalHeader()->count();
-    dataTable->insertRow(numRows);
-    dataTable->setItem(numRows, 0, new QTableWidgetItem("X"));
-    dataTable->setItem(numRows, 1, new QTableWidgetItem(QString::number(X[0][poseCenters.size() - 1])));
-    dataTable->setItem(numRows, 2, new QTableWidgetItem(QString::number(X[1][poseCenters.size() - 1])));
-    dataTable->setItem(numRows, 3, new QTableWidgetItem(QString::number(X[2][poseCenters.size() - 1])));
+		// Normalize the D matrix
+		double sum1;
+		sum1 = (dMatrix[0][0] * dMatrix[0][0]) + (dMatrix[1][0] * dMatrix[1][0]) + (dMatrix[2][0] * dMatrix[2][0]);
+		dNormalized[0][poseCenters.size() - 1] = dMatrix[0][0] / sqrt(sum1);
+		dNormalized[1][poseCenters.size() - 1] = dMatrix[1][0] / sqrt(sum1);
+		dNormalized[2][poseCenters.size() - 1] = dMatrix[2][0] / sqrt(sum1);
 
-    dataTable->insertRow(numRows + 1);
-    dataTable->setItem(numRows + 1, 0, new QTableWidgetItem("D"));
-    dataTable->setItem(numRows + 1, 1, new QTableWidgetItem(QString::number(dNormalized[0][poseCenters.size() - 1])));
-    dataTable->setItem(numRows + 1, 2, new QTableWidgetItem(QString::number(dNormalized[1][poseCenters.size() - 1])));
-    dataTable->setItem(numRows + 1, 3, new QTableWidgetItem(QString::number(dNormalized[2][poseCenters.size() - 1])));
-  }
+		// Send data to table
+		int numRows = dataTable->verticalHeader()->count();
+		dataTable->insertRow(numRows);
+		dataTable->setItem(numRows, 0, new QTableWidgetItem("X"));
+		dataTable->setItem(numRows, 1, new QTableWidgetItem(QString::number(X[0][poseCenters.size() - 1])));
+		dataTable->setItem(numRows, 2, new QTableWidgetItem(QString::number(X[1][poseCenters.size() - 1])));
+		dataTable->setItem(numRows, 3, new QTableWidgetItem(QString::number(X[2][poseCenters.size() - 1])));
 
-  if (poseCenters.size() == 15)
-  {
-    Matrix<double> rotation;
-    Matrix<double> translation;
-    double tol = 1e-9;
-    double error = 0;
+		dataTable->insertRow(numRows + 1);
+		dataTable->setItem(numRows + 1, 0, new QTableWidgetItem("D"));
+		dataTable->setItem(numRows + 1, 1, new QTableWidgetItem(QString::number(dNormalized[0][poseCenters.size() - 1])));
+		dataTable->setItem(numRows + 1, 2, new QTableWidgetItem(QString::number(dNormalized[1][poseCenters.size() - 1])));
+		dataTable->setItem(numRows + 1, 3, new QTableWidgetItem(QString::number(dNormalized[2][poseCenters.size() - 1])));
+	}
 
-    // Calculate point to line
-    p2l(X, origin, dNormalized, tol, rotation, translation, error);
+	if (poseCenters.size() == 15)
+	{
+		Matrix<double> rotation;
+		Matrix<double> translation;
+		double tol = 1e-9;
+		double error = 0;
 
-    double x = translation[0][0];
-    double y = translation[1][0];
-    double z = translation[2][0];
+		// Calculate point to line
+		p2l(X, origin, dNormalized, tol, rotation, translation, error);
 
-    double row1col1 = rotation[0][0];
-    double row1col2 = rotation[0][1];
-    double row1col3 = rotation[0][2];
+		double x = translation[0][0];
+		double y = translation[1][0];
+		double z = translation[2][0];
 
-    double row2col1 = rotation[1][0];
-    double row2col2 = rotation[1][1];
-    double row2col3 = rotation[1][2];
+		double row1col1 = rotation[0][0];
+		double row1col2 = rotation[0][1];
+		double row1col3 = rotation[0][2];
 
-    double row3col1 = rotation[2][0];
-    double row3col2 = rotation[2][1];
-    double row3col3 = rotation[2][2];
+		double row2col1 = rotation[1][0];
+		double row2col2 = rotation[1][1];
+		double row2col3 = rotation[1][2];
 
-    point2Line->SetElement(0, 0, row1col1);
-    point2Line->SetElement(0, 1, row1col2);
-    point2Line->SetElement(0, 2, row1col3);
+		double row3col1 = rotation[2][0];
+		double row3col2 = rotation[2][1];
+		double row3col3 = rotation[2][2];
 
-    point2Line->SetElement(1, 0, row2col1);
-    point2Line->SetElement(1, 1, row2col2);
-    point2Line->SetElement(1, 2, row2col3);
+		point2Line->SetElement(0, 0, row1col1);
+		point2Line->SetElement(0, 1, row1col2);
+		point2Line->SetElement(0, 2, row1col3);
 
-    point2Line->SetElement(2, 0, row3col1);
-    point2Line->SetElement(2, 1, row3col2);
-    point2Line->SetElement(2, 2, row3col3);
+		point2Line->SetElement(1, 0, row2col1);
+		point2Line->SetElement(1, 1, row2col2);
+		point2Line->SetElement(1, 2, row2col3);
 
-    point2Line->SetElement(0, 3, x);
-    point2Line->SetElement(1, 3, y);
-    point2Line->SetElement(2, 3, z);
+		point2Line->SetElement(2, 0, row3col1);
+		point2Line->SetElement(2, 1, row3col2);
+		point2Line->SetElement(2, 2, row3col3);
 
-    point2Line->SetElement(3, 0, 0);
-    point2Line->SetElement(3, 1, 0);
-    point2Line->SetElement(3, 2, 0);
-    point2Line->SetElement(3, 3, 1);
+		point2Line->SetElement(0, 3, x);
+		point2Line->SetElement(1, 3, y);
+		point2Line->SetElement(2, 3, z);
 
-    // tool transform = referenceCoil->GetTransform()
-    // HMD transform inverse = oculusHMD->GetTransform()->GetLinearInverse()
-    posMatrix->PostMultiply();
-    posMatrix->Identity();
-    posMatrix->Concatenate(referenceCoil->GetTransform());
-    posMatrix->Concatenate(oculusHMD->GetTransform()->GetLinearInverse());
-    posMatrix->Concatenate(point2Line);
-    double posePosition[3];
-    Matrix<double> posePositionM(3, 1);
-    Matrix<double> result(3, 1);
-    posMatrix->GetPosition(posePosition);
+		point2Line->SetElement(3, 0, 0);
+		point2Line->SetElement(3, 1, 0);
+		point2Line->SetElement(3, 2, 0);
+		point2Line->SetElement(3, 3, 1);
 
-    cv::Mat objectPoints(1, 3, CV_64FC1);
-    objectPoints.at<double>(0, 0) = posePosition[0];
-    objectPoints.at<double>(0, 1) = posePosition[1];
-    objectPoints.at<double>(0, 2) = posePosition[2];
+		// tool transform = referenceCoil->GetTransform()
+		// HMD transform inverse = oculusHMD->GetTransform()->GetLinearInverse()
+		bool isMatrixValid(false);
+		repository->GetTransform(PlusTransformName("PointerTip", "Camera"), tTip2Camera, &isMatrixValid);
 
-    cv::Mat rvec(3, 1, CV_64FC1);
-    rvec.at<double>(0, 0) = 0.0;
-    rvec.at<double>(1, 0) = 0.0;
-    rvec.at<double>(2, 0) = 0.0;
+		posMatrix->PostMultiply();
+		posMatrix->Identity();
+		posMatrix->Concatenate(tTip2Camera);
+		posMatrix->Concatenate(point2Line);
+		double posePosition[3];
+		Matrix<double> posePositionM(3, 1);
+		Matrix<double> result(3, 1);
+		posMatrix->GetPosition(posePosition);
 
-    cv::Mat tvec(3, 1, CV_64FC1);
-    tvec.at<double>(0, 0) = 0.0;
-    tvec.at<double>(1, 0) = 0.0;
-    tvec.at<double>(2, 0) = 0.0;
+		cv::Mat objectPoints(1, 3, CV_64FC1);
+		objectPoints.at<double>(0, 0) = posePosition[0];
+		objectPoints.at<double>(0, 1) = posePosition[1];
+		objectPoints.at<double>(0, 2) = posePosition[2];
 
-    cv::Mat intrinsic(3, 3, CV_64FC1);
-    intrinsic.at<double>(0, 0) = leftIntrinsicParam[0][0];
-    intrinsic.at<double>(0, 1) = leftIntrinsicParam[0][1];
-    intrinsic.at<double>(0, 2) = leftIntrinsicParam[0][2];
-    intrinsic.at<double>(1, 0) = leftIntrinsicParam[1][0];
-    intrinsic.at<double>(1, 1) = leftIntrinsicParam[1][1];
-    intrinsic.at<double>(1, 2) = leftIntrinsicParam[1][2];
-    intrinsic.at<double>(2, 0) = leftIntrinsicParam[2][0];
-    intrinsic.at<double>(2, 1) = leftIntrinsicParam[2][1];
-    intrinsic.at<double>(2, 2) = leftIntrinsicParam[2][2];
+		cv::Mat rvec(3, 1, CV_64FC1);
+		rvec.at<double>(0, 0) = 0.0;
+		rvec.at<double>(1, 0) = 0.0;
+		rvec.at<double>(2, 0) = 0.0;
 
-    cv::Mat distortion(1, 8, CV_64FC1);
-	distortion.at<double>(0, 0) = 0.0;
-	distortion.at<double>(0, 1) = 0.0;
-	distortion.at<double>(0, 2) = 0.0;
-	distortion.at<double>(0, 3) = 0.0;
-	distortion.at<double>(0, 4) = 0.0;
-	distortion.at<double>(0, 5) = 0.0;
-	distortion.at<double>(0, 6) = 0.0;
-	distortion.at<double>(0, 7) = 0.0;
+		cv::Mat tvec(3, 1, CV_64FC1);
+		tvec.at<double>(0, 0) = 0.0;
+		tvec.at<double>(1, 0) = 0.0;
+		tvec.at<double>(2, 0) = 0.0;
 
-    vector<Point2d> projectedPoints;
-	double xPrime = objectPoints.at<double>(0, 0) / objectPoints.at<double>(0, 2);
-	double yPrime = objectPoints.at<double>(0, 1) / objectPoints.at<double>(0, 2);
+		cv::Mat intrinsic(3, 3, CV_64FC1);
+		intrinsic.at<double>(0, 0) = leftIntrinsicParam[0][0];
+		intrinsic.at<double>(0, 1) = leftIntrinsicParam[0][1];
+		intrinsic.at<double>(0, 2) = leftIntrinsicParam[0][2];
+		intrinsic.at<double>(1, 0) = leftIntrinsicParam[1][0];
+		intrinsic.at<double>(1, 1) = leftIntrinsicParam[1][1];
+		intrinsic.at<double>(1, 2) = leftIntrinsicParam[1][2];
+		intrinsic.at<double>(2, 0) = leftIntrinsicParam[2][0];
+		intrinsic.at<double>(2, 1) = leftIntrinsicParam[2][1];
+		intrinsic.at<double>(2, 2) = leftIntrinsicParam[2][2];
 
-	double u = (leftIntrinsicParam[0][0] * xPrime) + leftIntrinsicParam[0][2];
-	double v = (leftIntrinsicParam[1][1] * yPrime) + leftIntrinsicParam[1][2];
+		cv::Mat distortion(1, 8, CV_64FC1);
+		distortion.at<double>(0, 0) = 0.0;
+		distortion.at<double>(0, 1) = 0.0;
+		distortion.at<double>(0, 2) = 0.0;
+		distortion.at<double>(0, 3) = 0.0;
+		distortion.at<double>(0, 4) = 0.0;
+		distortion.at<double>(0, 5) = 0.0;
+		distortion.at<double>(0, 6) = 0.0;
+		distortion.at<double>(0, 7) = 0.0;
 
-    vector<Point2f> center(1);
-	center[0].x = u;
-	center[0].y = v;
+		vector<Point2d> projectedPoints;
+		double xPrime = objectPoints.at<double>(0, 0) / objectPoints.at<double>(0, 2);
+		double yPrime = objectPoints.at<double>(0, 1) / objectPoints.at<double>(0, 2);
 
-	ovrvisionProHandle.SetCameraExposure(22500);
+		double u = (leftIntrinsicParam[0][0] * xPrime) + leftIntrinsicParam[0][2];
+		double v = (leftIntrinsicParam[1][1] * yPrime) + leftIntrinsicParam[1][2];
 
-    // Query the SDK for the latest frames
-	ovrvisionProHandle.PreStoreCamData(OVR::OV_CAMQT_DMSRMP);
+		vector<Point2f> center(1);
+		center[0].x = u;
+		center[0].y = v;
 
-    // Grab Left and Right Images
-	cv::Mat matLeft(ovrvisionProHandle.GetCamHeight(), ovrvisionProHandle.GetCamWidth(), CV_8UC4, ovrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_LEFT));
-	cv::Mat matRight(ovrvisionProHandle.GetCamHeight(), ovrvisionProHandle.GetCamWidth(), CV_8UC4, ovrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_RIGHT));
+		ovrvisionProHandle.SetCameraExposure(22500);
 
-	cv::Mat undistorted;
-	undistort(matLeft, undistorted, intrinsic, distortion);
+		// Query the SDK for the latest frames
+		ovrvisionProHandle.PreStoreCamData(OVR::OV_CAMQT_DMSRMP);
 
-    // circle center
-	circle(undistorted, center[0], 3, (0, 100, 100), -1, 8, 0);
-    
-	// circle outline
-	circle(undistorted, center[0], 14, Scalar(100, 100, 100), 3, 8, 0);
+		// Grab Left and Right Images
+		cv::Mat matLeft(ovrvisionProHandle.GetCamHeight(), ovrvisionProHandle.GetCamWidth(), CV_8UC4, ovrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_LEFT));
+		cv::Mat matRight(ovrvisionProHandle.GetCamHeight(), ovrvisionProHandle.GetCamWidth(), CV_8UC4, ovrvisionProHandle.GetCamImageBGRA(OVR::OV_CAMEYE_RIGHT));
 
-    /// Show your results
-    cv::namedWindow("Circle Found", CV_WINDOW_AUTOSIZE);
-	cv::imshow("Circle Found", undistorted);
-    cv::waitKey(0);
+		cv::Mat undistorted;
+		undistort(matLeft, undistorted, intrinsic, distortion);
 
-    cv::Mat hsv;
-    cv::Mat threshold;
+		// circle center
+		circle(undistorted, center[0], 3, (0, 100, 100), -1, 8, 0);
 
-    // Convert BGRA image to HSV image
-	cv::cvtColor(undistorted, hsv, COLOR_BGR2HSV);
+		// circle outline
+		circle(undistorted, center[0], 14, Scalar(100, 100, 100), 3, 8, 0);
 
-    // Filter everything except red - (0, 70, 50) -> (10, 255, 255) & (160, 70, 50) -> (179, 255, 255)
-    cv::inRange(hsv, cv::Scalar(HMinLower->value(), SMinLower->value(), VMinLower->value()), cv::Scalar(HMaxLower->value(), SMaxLower->value(), VMaxLower->value()), thresholdFinal);
-    cv::inRange(hsv, cv::Scalar(HMinUpper->value(), SMinUpper->value(), VMinUpper->value()), cv::Scalar(HMaxUpper->value(), SMaxUpper->value(), VMaxUpper->value()), threshold);
+		/// Show your results
+		cv::namedWindow("Circle Found", CV_WINDOW_AUTOSIZE);
+		cv::imshow("Circle Found", undistorted);
+		cv::waitKey(0);
 
-    cv::Mat mask;
-    cv::addWeighted(thresholdFinal, 1.0, threshold, 1.0, 0.0, mask);
+		cv::Mat hsv;
+		cv::Mat threshold;
 
-    namedWindow("Color Threshold", CV_WINDOW_AUTOSIZE);
-    imshow("Color Threshold", mask);
-    cv::waitKey(0);
+		// Convert BGRA image to HSV image
+		cv::cvtColor(undistorted, hsv, COLOR_BGR2HSV);
 
-    // Create a Gaussian & median Blur Filter
-    medianBlur(mask, mask, 5);
-    GaussianBlur(mask, mask, Size(9, 9), 2, 2);
+		// Filter everything except red - (0, 70, 50) -> (10, 255, 255) & (160, 70, 50) -> (179, 255, 255)
+		cv::inRange(hsv, cv::Scalar(HMinLower->value(), SMinLower->value(), VMinLower->value()), cv::Scalar(HMaxLower->value(), SMaxLower->value(), VMaxLower->value()), thresholdFinal);
+		cv::inRange(hsv, cv::Scalar(HMinUpper->value(), SMinUpper->value(), VMinUpper->value()), cv::Scalar(HMaxUpper->value(), SMaxUpper->value(), VMaxUpper->value()), threshold);
 
-    // circle center
-    circle(mask, center[0], 3, (0, 100, 100), -1, 8, 0);
-    
-	// circle outline
-    circle(mask, center[0], 14, Scalar(100, 100, 100), 3, 8, 0);
+		cv::Mat mask;
+		cv::addWeighted(thresholdFinal, 1.0, threshold, 1.0, 0.0, mask);
 
-    // Show Blur result
-	namedWindow("P2L Result", CV_WINDOW_AUTOSIZE);
-	imshow("P2L Result", mask);
-    cv::waitKey(0);
-  }
+		namedWindow("Color Threshold", CV_WINDOW_AUTOSIZE);
+		imshow("Color Threshold", mask);
+		cv::waitKey(0);
+
+		// Create a Gaussian & median Blur Filter
+		medianBlur(mask, mask, 5);
+		GaussianBlur(mask, mask, Size(9, 9), 2, 2);
+
+		// circle center
+		circle(mask, center[0], 3, (0, 100, 100), -1, 8, 0);
+
+		// circle outline
+		circle(mask, center[0], 14, Scalar(100, 100, 100), 3, 8, 0);
+
+		// Show Blur result
+		namedWindow("P2L Result", CV_WINDOW_AUTOSIZE);
+		imshow("P2L Result", mask);
+		cv::waitKey(0);
+	}
 }
 
 void mainWidget::startCalibration(bool checked)
 {
   if (checked)
   {
-    // Update Ovrvision image
-    ovrvisionUpdate();
-
     if (poseCenters.size() != 0)
     {
       poseCenters.resize(0);
@@ -2194,5 +1596,5 @@ void mainWidget::aboutRobarts()
 */
 void mainWidget::checkToolPorts()
 {
-  myTracker->Update();
+  //myTracker->Update();
 }
