@@ -82,9 +82,13 @@ data in realtime, and updates the screen accordingly.
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <vtkOpenVRRenderWindowInteractor.h>
 #include <vtkOpenVRRenderWindow.h>
 #include <vtkOpenVRRenderer.h>
 #include <vtkOpenVRCamera.h>
+#include <vtkSphereSource.h>
+#include <vtkPolyDataMapper.h>
+#include <vtkPolyDataReader.h>
 
 // Ovrvision includes
 #include <ovrvision_pro.h>
@@ -228,44 +232,48 @@ private: /*!< Private QT members. */
   QMenu*                                           calibMenu;
   QMenu*                                           controlMenu;
   QDockWidget*                                     controlDock;
-  QTimer*                      mTimer;
-  QDockWidget*                   toolInfo;
-  QTableWidget*                  dataTable;
-  QSpinBox*                    HMinLower;
-  QSpinBox*                    HMaxLower;
-  QSpinBox*                    SMinLower;
-  QSpinBox*                    VMinLower;
-  QSpinBox*                    VMaxLower;
-  QSpinBox*                    SMaxLower;
-  QSpinBox*                    HMinUpper;
-  QSpinBox*                    HMaxUpper;
-  QSpinBox*                    SMinUpper;
-  QSpinBox*                    VMinUpper;
-  QSpinBox*                    VMaxUpper;
-  QSpinBox*                    SMaxUpper;
-  QLineEdit*                   stylusTipRMS;
-	QTimer											*uiUpdateTimer;
+  QTimer*										   mTimer;
+  QDockWidget*									   toolInfo;
+  QTableWidget*									   dataTable;
+  QSpinBox*										   HMinLower;
+  QSpinBox*										   HMaxLower;
+  QSpinBox*										   SMinLower;
+  QSpinBox*										   VMinLower;
+  QSpinBox*										   VMaxLower;
+  QSpinBox*										   SMaxLower;
+  QSpinBox*										   HMinUpper;
+  QSpinBox*										   HMaxUpper;
+  QSpinBox*										   SMinUpper;
+  QSpinBox*										   VMinUpper;
+  QSpinBox*										   VMaxUpper;
+  QSpinBox*										   SMaxUpper;
+  QLineEdit*									   stylusTipRMS;
+  QTimer*										   uiUpdateTimer;
 
 private: /*!< Private VTK members. */
   QVTKWidget*                                      qvtk;
-  std::vector< QLightWidget*>                    lightWidgets;
-	vtkSmartPointer< vtkOpenVRRenderer >            ren = vtkSmartPointer<vtkOpenVRRenderer>::New();
-	vtkSmartPointer<vtkOpenVRCamera>				vrCamera = vtkSmartPointer<vtkOpenVRCamera>::New();
+  std::vector< QLightWidget*>                      lightWidgets;
+  vtkSmartPointer< vtkOpenVRRenderer >             ren = vtkSmartPointer<vtkOpenVRRenderer>::New();
+  vtkSmartPointer<vtkOpenVRCamera>				   vrCamera = vtkSmartPointer<vtkOpenVRCamera>::New();
+  vtkSmartPointer<vtkOpenVRRenderWindow>			       renWindow = vtkSmartPointer<vtkOpenVRRenderWindow>::New();
+  vtkSmartPointer<vtkOpenVRRenderWindowInteractor>       renInt = vtkSmartPointer<vtkOpenVRRenderWindowInteractor>::New();
 
-  /*!
+  // Transforms
+
+ /*!
   * Tracker related objects.
   */
   vtkSmartPointer< vtkNDITracker >                myTracker;
   vtkSmartPointer< vtkTrackerTool >               oculusHMD;
   vtkSmartPointer< vtkTrackerTool >               referenceCoil;
-	vtkSmartPointer< vtkTrackerTool >				phantomTool;
+  vtkSmartPointer< vtkTrackerTool >				  phantomTool;
 
-  bool                      isProbeVisible, isOculusVisible;
+  bool											  isProbeVisible, isOculusVisible;
 
-	echen::Matrix<double>							leftIntrinsicParam;
-  vector<double>                  leftDistortionParam;
-  cv::Mat                     thresholdFinal;
-  vector<Point2f>                 poseCenters;
+  echen::Matrix<double>							  leftIntrinsicParam;
+  vector<double>								  leftDistortionParam;
+  cv::Mat										  thresholdFinal;
+  vector<Point2f>								  poseCenters;
 	echen::Matrix<double>							X;
 	echen::Matrix<double>							origin;
 	echen::Matrix<double>							dNormalized;
@@ -278,11 +286,14 @@ private: /*!< Private VTK members. */
 	vtkSmartPointer<vtkMatrix4x4>					tempP2L = vtkSmartPointer<vtkMatrix4x4>::New();
 	vtkSmartPointer<vtkActor>						phantomActor = vtkSmartPointer<vtkActor>::New();
 	vtkSmartPointer<vtkTransform>					phantomToPhysicalTransform = vtkSmartPointer<vtkTransform>::New();
-	vtkSmartPointer<vtkOpenVRRenderWindow>			vrWindow = nullptr;
+	vtkSmartPointer<vtkOpenVRRenderWindow>			vrWindow = vtkSmartPointer<vtkOpenVRRenderWindow>::New();
 	vtkSmartPointer<vtkTransform>					 transformP2L = vtkSmartPointer<vtkTransform>::New();
-	vtkSmartPointer< vtkTransform >					phantomTransform =vtkSmartPointer< vtkTransform >::New();
+	vtkSmartPointer<vtkTransform>					 transformP2LInv = vtkSmartPointer<vtkTransform>::New();
+	vtkSmartPointer<vtkTransform>					cameraTransform = vtkSmartPointer<vtkTransform>::New();
+	vtkSmartPointer<vtkTransform>					cameraInvTransform = vtkSmartPointer<vtkTransform>::New();
+
 	vtkSmartPointer<vtkActor>						sphereActor = vtkSmartPointer<vtkActor>::New();
-	vtkSmartPointer<vtkTransform>					sphereTransform = vtkSmartPointer<vtkTransform>::New();
+
 
 	cv::Mat											matLeft;
 	cv::Mat											matRight;
