@@ -219,8 +219,8 @@ void mainWidget::viewScene(bool checked)
 			matRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3, rightImage->GetScalarPointer(0, 0, 0));
 
 			// Undistort images
-			undistort(matLeft, finalMatLeft, intrinsic, distortion);
-			undistort(matRight, finalMatRight, intrinsic, distortion);
+			undistort(matLeft, finalMatLeft, intrinsicLeft, distortionLeft);
+			undistort(matRight, finalMatRight, intrinsicRight, distortionRight);
 
 			// Convert image from opencv to vtk
 			imageImportLeft->SetDataSpacing(1, 1, 1);
@@ -305,8 +305,8 @@ void mainWidget::collectPose()
 	matRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3, rightImage->GetScalarPointer(0, 0, 0));
 
 	// Undistort images
-	undistort(matLeft, finalMatLeft, intrinsic, distortion);
-	undistort(matRight, finalMatRight, intrinsic, distortion);
+	undistort(matLeft, finalMatLeft, intrinsicLeft, distortionLeft);
+	//undistort(matRight, finalMatRight, intrinsic, distortion);
 
 	bool isLMatrixValid(false);
 	if(repository->GetTransform(PlusTransformName("PointerTip", "LeftImagePlane"), tTip2ImageL, &isLMatrixValid) == PLUS_SUCCESS && isLMatrixValid);
@@ -329,10 +329,14 @@ void mainWidget::collectPose()
 			<< "," << tTip2ImageR->GetElement(2, 0) << "," << tTip2ImageR->GetElement(2, 1) << "," << tTip2ImageR->GetElement(2, 2) << "," << tTip2ImageR->GetElement(2, 3)
 			<< "," << tTip2ImageR->GetElement(3, 0) << "," << tTip2ImageR->GetElement(3, 1) << "," << tTip2ImageR->GetElement(3, 2) << "," << tTip2ImageR->GetElement(3, 3);
 	}
+	string number = to_string(imageCount);
+	string name = "./Results/poseR" + number;
+	string fullName = name +".png";
 
 	// Save left and right images
 	imwrite("./Results/poseL.png", finalMatLeft);
-	imwrite("./Results/poseR.png", finalMatRight);
+	imwrite(fullName, matRight);
+	imageCount++;
 }
 
 // on accept the next pose is calculated
@@ -365,8 +369,8 @@ void mainWidget::nextPose(bool checked)
 		undistortedLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3);
 		undistortedRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3);
 
-		undistort(matLeft, undistortedLeft, intrinsic, distortion);
-		undistort(matRight, undistortedRight, intrinsic, distortion);
+		undistort(matLeft, undistortedLeft, intrinsicLeft, distortionLeft);
+		undistort(matRight, undistortedRight, intrinsicRight, distortionRight);
 
 		cv::flip(undistortedLeft, undistortedLeft, 0);
 		cv::flip(undistortedRight, undistortedRight, 0);
@@ -382,6 +386,10 @@ void mainWidget::nextPose(bool checked)
 		cv::cvtColor(undistortedRight, drawingRight, COLOR_RGB2BGR);
 		drawingLeft.setTo(cv::Scalar(0, 0, 0));
 		drawingRight.setTo(cv::Scalar(0, 0, 0));
+
+		namedWindow("RGB", CV_WINDOW_AUTOSIZE);
+		imshow("RGB", undistortedRight);
+		cv::waitKey(0);
 
 		// Filter everything except red - (0, 70, 50) -> (10, 255, 255) & (160, 70, 50) -> (179, 255, 255)
 		cv::inRange(hsvLeft, cv::Scalar(HMinLower->value(), SMinLower->value(), VMinLower->value()), cv::Scalar(HMaxLower->value(), SMaxLower->value(), VMaxLower->value()), thresholdFinalLeft);
@@ -399,6 +407,10 @@ void mainWidget::nextPose(bool checked)
 		GaussianBlur(maskLeft, maskLeft, Size(9, 9), 2, 2);
 		medianBlur(maskRight, maskRight, 5);
 		GaussianBlur(maskRight, maskRight, Size(9, 9), 2, 2);
+
+		namedWindow("Blur", CV_WINDOW_AUTOSIZE);
+		imshow("Blur", maskRight);
+		cv::waitKey(0);
 
 		vector<Vec3f> circlesLeft;
 		vector<Vec3f> circlesRight;
@@ -425,9 +437,9 @@ void mainWidget::nextPose(bool checked)
 			circle(drawingLeft, center, radius, Scalar(100, 100, 100), -1, 8, 0);
 
 			// Show detected circle
-			namedWindow("Circle", CV_WINDOW_AUTOSIZE);
-			imshow("Circle", drawingLeft);
-			cv::waitKey(0);
+			//namedWindow("Circle", CV_WINDOW_AUTOSIZE);
+			//imshow("Circle", drawingLeft);
+			//cv::waitKey(0);
 
 			// Set thresholds for contour detection
 			int thresh = 100;
@@ -460,9 +472,9 @@ void mainWidget::nextPose(bool checked)
 			}
 
 			// Show final result
-			namedWindow("Final Detection", CV_WINDOW_AUTOSIZE);
-			imshow("Final Detection", drawingLeft);
-			cv::waitKey(0);
+			//namedWindow("Final Detection", CV_WINDOW_AUTOSIZE);
+			//imshow("Final Detection", drawingLeft);
+			//cv::waitKey(0);
 
 			// Save circle position data
 			poseCentersLeft.push_back(centerTwo[0]);
@@ -679,8 +691,8 @@ void mainWidget::manualSelection(bool checked)
 	  undistortedLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3);
 	  undistortedRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3);
 
-	  undistort(matLeft, undistortedLeft, intrinsic, distortion);
-	  undistort(matRight, undistortedRight, intrinsic, distortion);
+	  undistort(matLeft, undistortedLeft, intrinsicLeft, distortionLeft);
+	  undistort(matRight, undistortedRight, intrinsicRight, distortionRight);
 
 	  cv::flip(undistortedLeft, undistortedLeft, 0);
 	  cv::flip(undistortedRight, undistortedRight, 0);
@@ -809,6 +821,9 @@ void mainWidget::createVTKObjects()
 	tip2LImageName.SetTransformName("PointerTipToLeftImagePlane");
 	tip2CameraName.SetTransformName("PointerTipToCamera");
 	camera2LImageName.SetTransformName("CameraToLeftImagePlane");
+
+	isViewScene = false;
+	isTrackerInit = false;
 }
 
 /*!
@@ -833,21 +848,37 @@ void mainWidget::setupARRendering()
 {
 	// Set intrinsic calibration
 	leftIntrinsicParam = Matrix<double>(3, 3);
-	leftIntrinsicParam[0][0] = intrinsic.at<double>(0, 0) = 4.4308778509658629e+02;
-	leftIntrinsicParam[0][1] = intrinsic.at<double>(0, 1) = 0;
-	leftIntrinsicParam[0][2] = intrinsic.at<double>(0, 2) = 4.9137630327079307e+02;
-	leftIntrinsicParam[1][0] = intrinsic.at<double>(1, 0) = 0;
-	leftIntrinsicParam[1][1] = intrinsic.at<double>(1, 1) = 4.4088255151097923e+02;
-	leftIntrinsicParam[1][2] = intrinsic.at<double>(1, 2) = 4.7733731041974312e+02;
-	leftIntrinsicParam[2][0] = intrinsic.at<double>(2, 0) = 0;
-	leftIntrinsicParam[2][1] = intrinsic.at<double>(2, 1) = 0;
-	leftIntrinsicParam[2][2] = intrinsic.at<double>(2, 2) = 1;
+	leftIntrinsicParam[0][0] = intrinsicLeft.at<double>(0, 0) = 4.4308778509658629e+02;
+	leftIntrinsicParam[0][1] = intrinsicLeft.at<double>(0, 1) = 0;
+	leftIntrinsicParam[0][2] = intrinsicLeft.at<double>(0, 2) = 4.9137630327079307e+02;
+	leftIntrinsicParam[1][0] = intrinsicLeft.at<double>(1, 0) = 0;
+	leftIntrinsicParam[1][1] = intrinsicLeft.at<double>(1, 1) = 4.4088255151097923e+02;
+	leftIntrinsicParam[1][2] = intrinsicLeft.at<double>(1, 2) = 4.7733731041974312e+02;
+	leftIntrinsicParam[2][0] = intrinsicLeft.at<double>(2, 0) = 0;
+	leftIntrinsicParam[2][1] = intrinsicLeft.at<double>(2, 1) = 0;
+	leftIntrinsicParam[2][2] = intrinsicLeft.at<double>(2, 2) = 1;
+
+	rightIntrinsicParam = Matrix<double>(3, 3);
+	rightIntrinsicParam[0][0] = intrinsicRight.at<double>(0, 0) = 4.3642091715320345e+02;
+	rightIntrinsicParam[0][1] = intrinsicRight.at<double>(0, 1) = 0;
+	rightIntrinsicParam[0][2] = intrinsicRight.at<double>(0, 2) = 5.0206905222553593e+02;
+	rightIntrinsicParam[1][0] = intrinsicRight.at<double>(1, 0) = 0;
+	rightIntrinsicParam[1][1] = intrinsicRight.at<double>(1, 1) = 4.3449181164428381e+02;
+	rightIntrinsicParam[1][2] = intrinsicRight.at<double>(1, 2) = 4.5455132093848829e+02;
+	rightIntrinsicParam[2][0] = intrinsicRight.at<double>(2, 0) = 0;
+	rightIntrinsicParam[2][1] = intrinsicRight.at<double>(2, 1) = 0;
+	rightIntrinsicParam[2][2] = intrinsicRight.at<double>(2, 2) = 1;
 
 	// Distortion Parameters
-	distortion.at<double>(0, 0) = -3.4217579502885637e-01;
-	distortion.at<double>(0, 1) = 1.5322858206254297e-01;
-	distortion.at<double>(0, 2) = 7.0265221404534526e-04;
-	distortion.at<double>(0, 3) = -1.0123352757817517e-03;
+	distortionLeft.at<double>(0, 0) = -3.4217579502885637e-01;
+	distortionLeft.at<double>(0, 1) = 1.5322858206254297e-01;
+	distortionLeft.at<double>(0, 2) = 7.0265221404534526e-04;
+	distortionLeft.at<double>(0, 3) = -1.0123352757817517e-03;
+
+	distortionRight.at<double>(0, 0) = 2.2901883203387270e-04;
+	distortionRight.at<double>(0, 1) = -2.8041302114925171e-02;
+	distortionRight.at<double>(0, 2) = -1.3213753434011032e-02;
+	distortionRight.at<double>(0, 3) = 1.2788565654151332e-02;
 }
 
 //
@@ -931,8 +962,8 @@ void mainWidget::updateTrackerInfo()
 		  double vLeft = (leftIntrinsicParam[1][1] * yPrimeLeft) + leftIntrinsicParam[1][2];
 
 		  // TODO: Get intrinsic parameters for right camera
-		  double uRight = (leftIntrinsicParam[0][0] * xPrimeRight) + leftIntrinsicParam[0][2];
-		  double vRight = (leftIntrinsicParam[1][1] * yPrimeRight) + leftIntrinsicParam[1][2];
+		  double uRight = (rightIntrinsicParam[0][0] * xPrimeRight) + rightIntrinsicParam[0][2];
+		  double vRight = (rightIntrinsicParam[1][1] * yPrimeRight) + rightIntrinsicParam[1][2];
 
 		  vector<Point2f> centerLeft(1);
 		  vector<Point2f> centerRight(1);
@@ -961,20 +992,25 @@ void mainWidget::updateTrackerInfo()
 		  undistortedLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3);
 		  undistortedRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3);
 
-		  undistort(matLeft, undistortedLeft, intrinsic, distortion);
-		  //undistort(matRight, undistortedRight, intrinsic, distortion);
+		  undistort(matLeft, undistortedLeft, intrinsicLeft, distortionLeft);
+		  undistort(matRight, undistortedRight, intrinsicRight, distortionRight);
 
 		  // Flip images to draw circles
 		  cv::flip(undistortedLeft, finalMatLeft, 0);
 		  cv::flip(matRight, finalMatRight, 0);
 
-		  // circle center
-		  circle(finalMatLeft, centerLeft[0], 3, (0, 100, 100), -1, 8, 0);
-		  circle(finalMatRight, centerRight[0], 3, (0, 100, 100), -1, 8, 0);
+		  // Only draw pointer tip if both pointer and camera are visible
+		  if (repository->GetTransform(probe2TrackerName, tProbe2Tracker, &isProbeMatrixValid) == PLUS_SUCCESS && isProbeMatrixValid &&
+			  repository->GetTransform(camera2TrackerName, tCamera2Tracker, &isCamMatrixValid) == PLUS_SUCCESS && isCamMatrixValid)
+		  {
+			  // circle center
+			  circle(finalMatLeft, centerLeft[0], 3, (0, 100, 100), -1, 8, 0);
+			  circle(finalMatRight, centerRight[0], 3, (0, 100, 100), -1, 8, 0);
 
-		  // circle outline
-		  circle(finalMatLeft, centerLeft[0], 14, Scalar(100, 100, 100), 3, 8, 0);
-		  circle(finalMatRight, centerRight[0], 14, Scalar(100, 100, 100), 3, 8, 0);
+			  // circle outline
+			  circle(finalMatLeft, centerLeft[0], 14, Scalar(100, 100, 100), 3, 8, 0);
+			  circle(finalMatRight, centerRight[0], 14, Scalar(100, 100, 100), 3, 8, 0);
+		  }
 
 		  // Flip back for vtk
 		  cv::flip(finalMatLeft, finalMatLeft, 0);
@@ -1113,8 +1149,8 @@ void mainWidget::startTrackerSlot(bool checked)
 			matRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3, rightImage->GetScalarPointer(0, 0, 0));
 
 			// Undistort images
-			undistort(matLeft, finalMatLeft, intrinsic, distortion);
-			undistort(matRight, finalMatRight, intrinsic, distortion);
+			undistort(matLeft, finalMatLeft, intrinsicLeft, distortionLeft);
+			undistort(matRight, finalMatRight, intrinsicRight, distortionRight);
 
 			// Convert image from opencv to vtk
 			imageImportLeft->SetDataSpacing(1, 1, 1);
@@ -1124,6 +1160,7 @@ void mainWidget::startTrackerSlot(bool checked)
 			imageImportLeft->SetDataScalarTypeToUnsignedChar();
 			imageImportLeft->SetNumberOfScalarComponents(finalMatLeft.channels());
 			imageImportLeft->SetImportVoidPointer(finalMatLeft.data);
+			imageImportLeft->Modified();
 			imageImportLeft->Update();
 
 			imageImportRight->SetDataSpacing(1, 1, 1);
@@ -1133,6 +1170,7 @@ void mainWidget::startTrackerSlot(bool checked)
 			imageImportRight->SetDataScalarTypeToUnsignedChar();
 			imageImportRight->SetNumberOfScalarComponents(finalMatRight.channels());
 			imageImportRight->SetImportVoidPointer(finalMatRight.data);
+			imageImportRight->Modified();
 			imageImportRight->Update();
 
 			textureLeft->SetInputConnection(imageImportLeft->GetOutputPort());
@@ -1143,11 +1181,12 @@ void mainWidget::startTrackerSlot(bool checked)
 				0.737296753348973, 0.11523277439025, -0.665668765383645, -14.6388968911687,
 				0.672165321419851, -0.0263419437173227, 0.739932350071099, -4.60575695614759, 0, 0, 0, 1 };
 
+			renWindow->AddRenderer(ren);
 			vrWindow = dynamic_cast<vtkOpenVRRenderWindow*>(renWindow.Get());
 			vrWindow->SetTexturedBackground(true);
+			vrWindow->AddRenderer(ren);
 			vrWindow->SetLeftBackgroundTexture(textureLeft);
 			vrWindow->SetRightBackgroundTexture(textureRight);
-			vrWindow->AddRenderer(ren);
 
 			ren->ResetCameraClippingRange();
 			vrWindow->Render();
@@ -1169,8 +1208,6 @@ void mainWidget::startTrackerSlot(bool checked)
 				posMatrixRight->Identity();
 				posMatrixRight->Concatenate(tTip2ImageR);
 			}
-
-			isViewScene = true;
 
 			isTrackerInit = true;
 			trackerWidget->viewSceneButton->setEnabled(true);
@@ -1673,27 +1710,6 @@ void mainWidget::getLeftTransform()
 		tvec.at<double>(1, 0) = 0.0;
 		tvec.at<double>(2, 0) = 0.0;
 
-		cv::Mat intrinsic(3, 3, CV_64FC1);
-		intrinsic.at<double>(0, 0) = leftIntrinsicParam[0][0];
-		intrinsic.at<double>(0, 1) = leftIntrinsicParam[0][1];
-		intrinsic.at<double>(0, 2) = leftIntrinsicParam[0][2];
-		intrinsic.at<double>(1, 0) = leftIntrinsicParam[1][0];
-		intrinsic.at<double>(1, 1) = leftIntrinsicParam[1][1];
-		intrinsic.at<double>(1, 2) = leftIntrinsicParam[1][2];
-		intrinsic.at<double>(2, 0) = leftIntrinsicParam[2][0];
-		intrinsic.at<double>(2, 1) = leftIntrinsicParam[2][1];
-		intrinsic.at<double>(2, 2) = leftIntrinsicParam[2][2];
-
-		cv::Mat distortion(1, 8, CV_64FC1);
-		distortion.at<double>(0, 0) = 0.0;
-		distortion.at<double>(0, 1) = 0.0;
-		distortion.at<double>(0, 2) = 0.0;
-		distortion.at<double>(0, 3) = 0.0;
-		distortion.at<double>(0, 4) = 0.0;
-		distortion.at<double>(0, 5) = 0.0;
-		distortion.at<double>(0, 6) = 0.0;
-		distortion.at<double>(0, 7) = 0.0;
-
 		vector<Point2d> projectedPoints;
 		double xPrime = objectPoints.at<double>(0, 0) / objectPoints.at<double>(0, 2);
 		double yPrime = objectPoints.at<double>(0, 1) / objectPoints.at<double>(0, 2);
@@ -1718,7 +1734,7 @@ void mainWidget::getLeftTransform()
 
 		// Undistort image
 		undistortedLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3);
-		undistort(matLeft, undistortedLeft, intrinsic, distortion);
+		undistort(matLeft, undistortedLeft, intrinsicLeft, distortionRight);
 
 		// Flip image to draw circle
 		cv::flip(undistortedLeft, finalMatLeft, 0);
@@ -1813,13 +1829,13 @@ void mainWidget::getRightTransform()
 
 		// Find the inverse of the camera intrinsic param matrix
 		// TODO: Get right intrinsic parameters
-		Matrix<double> leftIntrinsicInv(3, 3);
-		invm3x3(leftIntrinsicParam, leftIntrinsicInv);
+		Matrix<double> rightIntrinsicInv(3, 3);
+		invm3x3(rightIntrinsicParam, rightIntrinsicInv);
 
 		// Calculate D matrix by multiplying the inverse of the
 		// intrinsic param matrix by the pixel matrix
 		Matrix<double> dMatrix(3, 1);
-		dMatrix = leftIntrinsicInv * pixel;
+		dMatrix = rightIntrinsicInv * pixel;
 
 		// Multiply by inverse of distortion coefficients
 		vector<Point2d> pointCoords(1);
@@ -1925,34 +1941,12 @@ void mainWidget::getRightTransform()
 		tvec.at<double>(1, 0) = 0.0;
 		tvec.at<double>(2, 0) = 0.0;
 
-		// TODO: Get right intrinsic parameters
-		cv::Mat intrinsic(3, 3, CV_64FC1);
-		intrinsic.at<double>(0, 0) = leftIntrinsicParam[0][0];
-		intrinsic.at<double>(0, 1) = leftIntrinsicParam[0][1];
-		intrinsic.at<double>(0, 2) = leftIntrinsicParam[0][2];
-		intrinsic.at<double>(1, 0) = leftIntrinsicParam[1][0];
-		intrinsic.at<double>(1, 1) = leftIntrinsicParam[1][1];
-		intrinsic.at<double>(1, 2) = leftIntrinsicParam[1][2];
-		intrinsic.at<double>(2, 0) = leftIntrinsicParam[2][0];
-		intrinsic.at<double>(2, 1) = leftIntrinsicParam[2][1];
-		intrinsic.at<double>(2, 2) = leftIntrinsicParam[2][2];
-
-		cv::Mat distortion(1, 8, CV_64FC1);
-		distortion.at<double>(0, 0) = 0.0;
-		distortion.at<double>(0, 1) = 0.0;
-		distortion.at<double>(0, 2) = 0.0;
-		distortion.at<double>(0, 3) = 0.0;
-		distortion.at<double>(0, 4) = 0.0;
-		distortion.at<double>(0, 5) = 0.0;
-		distortion.at<double>(0, 6) = 0.0;
-		distortion.at<double>(0, 7) = 0.0;
-
 		vector<Point2d> projectedPoints;
 		double xPrime = objectPoints.at<double>(0, 0) / objectPoints.at<double>(0, 2);
 		double yPrime = objectPoints.at<double>(0, 1) / objectPoints.at<double>(0, 2);
 
-		double u = (leftIntrinsicParam[0][0] * xPrime) + leftIntrinsicParam[0][2];
-		double v = (leftIntrinsicParam[1][1] * yPrime) + leftIntrinsicParam[1][2];
+		double u = (rightIntrinsicParam[0][0] * xPrime) + rightIntrinsicParam[0][2];
+		double v = (rightIntrinsicParam[1][1] * yPrime) + rightIntrinsicParam[1][2];
 
 		vector<Point2f> center(1);
 		center[0].x = u;
@@ -1971,7 +1965,7 @@ void mainWidget::getRightTransform()
 
 		// Undistort images
 		undistortedRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3);
-		undistort(matRight, undistortedRight, intrinsic, distortion);
+		undistort(matRight, undistortedRight, intrinsicRight, distortionRight);
 
 		// Flip image to draw circles
 		cv::flip(undistortedRight, finalMatRight, 0);

@@ -283,9 +283,11 @@ private: /*!< Private VTK members. */
 	bool											isProbeVisible;
 	bool											isOculusVisible;
 	bool											isViewScene;
-
+	int imageCount = 0;
 	echen::Matrix<double>							leftIntrinsicParam;
+	echen::Matrix<double>							rightIntrinsicParam;
 	vector<double>									leftDistortionParam;
+	vector<double>									rightDistortionParam;
 	vector<Point2f>									poseCentersLeft;
 	vector<Point2f>									poseCentersRight;
 	echen::Matrix<double>							XLeft;
@@ -401,8 +403,10 @@ private: /*!< Private VTK members. */
 	OVR::OvrvisionPro								ovrvisionProHandle;
 	vtkSmartPointer< vtkTransform >					posMatrixLeft					= vtkSmartPointer< vtkTransform >::New();
 	vtkSmartPointer< vtkTransform >					posMatrixRight					= vtkSmartPointer< vtkTransform >::New();
-	cv::Mat											intrinsic						= Mat(3, 3, CV_64FC1);
-	cv::Mat											distortion						= Mat(1, 4, CV_64FC1);
+	cv::Mat											intrinsicLeft					= Mat(3, 3, CV_64FC1);
+	cv::Mat											intrinsicRight					= Mat(3, 3, CV_64FC1);
+	cv::Mat											distortionLeft					= Mat(1, 4, CV_64FC1);
+	cv::Mat											distortionRight					= Mat(1, 4, CV_64FC1);
 
 private:
   eccTrackerWidget*									trackerWidget;
