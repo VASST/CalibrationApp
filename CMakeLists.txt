@@ -16,11 +16,9 @@ SET(CMAKE_AUTORCC ON)
 FIND_PACKAGE( vtk REQUIRED )
 INCLUDE( ${VTK_USE_FILE} )
 
-FIND_PACKAGE( RobartsVTK REQUIRED NO_MODULE)
-
 FIND_PACKAGE( PlusLib REQUIRED NO_MODULE)
 
-FIND_PACKAGE( OpenCV REQUIRED )
+FIND_PACKAGE( OpenCV REQUIRED NO_MODULE)
 
 FIND_PACKAGE( OvrvisionPro REQUIRED)
 FIND_PACKAGE( OpenVR REQUIRED )
@@ -86,7 +84,15 @@ TARGET_LINK_LIBRARIES( VRApp
   vtkglew
   vtkRenderingGL2PS${VTK_RENDERING_BACKEND}
   ${OpenCV_LIBS}
-  ${ITK_LIBRARIES}
+  vtkPlusCalibration
+  vtkPlusCommon
+  vtkPlusDataCollection
+  vtkPlusHaptics
+  vtkPlusImageProcessing
+  vtkPlusOpenIGTLink
+  vtkPlusRendering
+  vtkPlusServer
+  vtkPlusUsSimulator
+  vtkPlusVolumeReconstruction
   OvrvisionPro
-  vtkPlusDataCollection 
 )

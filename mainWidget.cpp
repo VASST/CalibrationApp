@@ -72,7 +72,7 @@ POSSIBILITY OF SUCH DAMAGES.
 #include <QtGui>
 
 // VTK includes
-#include <QVTKWidget.h>
+//#include <QVTKWidget.h>
 #include <vtkProperty.h>
 #include <vtkRenderWindow.h>
 #include <vtkRenderer.h>
@@ -215,12 +215,12 @@ void mainWidget::viewScene(bool checked)
 			rightImage->GetDimensions(rightDims);
 
 			// Copy vtkImage to cv::Mat
-			matLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3, leftImage->GetScalarPointer(0, 0, 0));
-			matRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3, rightImage->GetScalarPointer(0, 0, 0));
+			finalMatLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3, leftImage->GetScalarPointer(0, 0, 0));
+			finalMatRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3, rightImage->GetScalarPointer(0, 0, 0));
 
 			// Undistort images
-			undistort(matLeft, finalMatLeft, intrinsicLeft, distortionLeft);
-			undistort(matRight, finalMatRight, intrinsicRight, distortionRight);
+			//undistort(matLeft, finalMatLeft, intrinsicLeft, distortionLeft);
+			//undistort(matRight, finalMatRight, intrinsicRight, distortionRight);
 
 			// Convert image from opencv to vtk
 			imageImportLeft->SetDataSpacing(1, 1, 1);
@@ -260,7 +260,7 @@ void mainWidget::viewScene(bool checked)
 
 			bool isLMatrixValid(false);
 			repository->SetTransforms(leftMixerFrame);
-			if (repository->GetTransform(PlusTransformName("PointerTip", "LeftImagePlane"), tTip2ImageL, &isLMatrixValid) == PLUS_SUCCESS && isLMatrixValid);
+			if (repository->GetTransform(PlusTransformName("PointerTip", "LeftImagePlane"), tTip2ImageL, &isLMatrixValid) == PLUS_SUCCESS && isLMatrixValid)
 			{
 				posMatrixLeft->PostMultiply();
 				posMatrixLeft->Identity();
@@ -269,7 +269,7 @@ void mainWidget::viewScene(bool checked)
 
 			bool isRMatrixValid(false);
 			repository->SetTransforms(rightMixerFrame);
-			if (repository->GetTransform(PlusTransformName("PointerTip", "RightImagePlane"), tTip2ImageR, &isRMatrixValid) == PLUS_SUCCESS && isRMatrixValid);
+			if (repository->GetTransform(PlusTransformName("PointerTip", "RightImagePlane"), tTip2ImageR, &isRMatrixValid) == PLUS_SUCCESS && isRMatrixValid)
 			{
 				posMatrixRight->PostMultiply();
 				posMatrixRight->Identity();
@@ -306,10 +306,10 @@ void mainWidget::collectPose()
 
 	// Undistort images
 	undistort(matLeft, finalMatLeft, intrinsicLeft, distortionLeft);
-	//undistort(matRight, finalMatRight, intrinsic, distortion);
+	undistort(matRight, finalMatRight, intrinsicRight, distortionRight);
 
 	bool isLMatrixValid(false);
-	if(repository->GetTransform(PlusTransformName("PointerTip", "LeftImagePlane"), tTip2ImageL, &isLMatrixValid) == PLUS_SUCCESS && isLMatrixValid);
+	if(repository->GetTransform(PlusTransformName("PointerTip", "LeftImagePlane"), tTip2ImageL, &isLMatrixValid) == PLUS_SUCCESS && isLMatrixValid)
 	{
 		// Save data
 		ofstream myfile("./Results/poseL.csv");
@@ -320,7 +320,7 @@ void mainWidget::collectPose()
 	}
 	
 	bool isRMatrixValid(false);
-	if (repository->GetTransform(PlusTransformName("PointerTip", "RightImagePlane"), tTip2ImageR, &isRMatrixValid) == PLUS_SUCCESS && isRMatrixValid);
+	if (repository->GetTransform(PlusTransformName("PointerTip", "RightImagePlane"), tTip2ImageR, &isRMatrixValid) == PLUS_SUCCESS && isRMatrixValid)
 	{
 		// Save data
 		ofstream myfile("./Results/poseR.csv");
@@ -937,7 +937,7 @@ void mainWidget::updateTrackerInfo()
 
 	  bool isRMatrixValid(false);
 	  repository->SetTransforms(rightMixerFrame);
-	  if (repository->GetTransform(PlusTransformName("PointerTip", "RightImagePlane"), tTip2ImageR, &isRMatrixValid) == PLUS_SUCCESS && isRMatrixValid);
+	  if (repository->GetTransform(PlusTransformName("PointerTip", "RightImagePlane"), tTip2ImageR, &isRMatrixValid) == PLUS_SUCCESS && isRMatrixValid)
 	  {
 		  posMatrixRight->PostMultiply();
 		  posMatrixRight->Identity();
@@ -961,7 +961,6 @@ void mainWidget::updateTrackerInfo()
 		  double uLeft = (leftIntrinsicParam[0][0] * xPrimeLeft) + leftIntrinsicParam[0][2];
 		  double vLeft = (leftIntrinsicParam[1][1] * yPrimeLeft) + leftIntrinsicParam[1][2];
 
-		  // TODO: Get intrinsic parameters for right camera
 		  double uRight = (rightIntrinsicParam[0][0] * xPrimeRight) + rightIntrinsicParam[0][2];
 		  double vRight = (rightIntrinsicParam[1][1] * yPrimeRight) + rightIntrinsicParam[1][2];
 
@@ -987,7 +986,7 @@ void mainWidget::updateTrackerInfo()
 		  // Copy vtkImage to cv::Mat
 		  matLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3, leftImage->GetScalarPointer(0, 0, 0));
 		  matRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3, rightImage->GetScalarPointer(0, 0, 0));
-
+		  
 		  // Undistort images
 		  undistortedLeft = cv::Mat(leftDims[1], leftDims[0], CV_8UC3);
 		  undistortedRight = cv::Mat(rightDims[1], rightDims[0], CV_8UC3);
@@ -996,8 +995,8 @@ void mainWidget::updateTrackerInfo()
 		  undistort(matRight, undistortedRight, intrinsicRight, distortionRight);
 
 		  // Flip images to draw circles
-		  cv::flip(undistortedLeft, finalMatLeft, 0);
-		  cv::flip(matRight, finalMatRight, 0);
+		 cv::flip(undistortedLeft, finalMatLeft, 0);
+		 cv::flip(undistortedRight, finalMatRight, 0);
 
 		  // Only draw pointer tip if both pointer and camera are visible
 		  if (repository->GetTransform(probe2TrackerName, tProbe2Tracker, &isProbeMatrixValid) == PLUS_SUCCESS && isProbeMatrixValid &&
@@ -1027,11 +1026,7 @@ void mainWidget::updateTrackerInfo()
 		  textureLeft->Update();
 		  textureRight->Update();
 
-		  // reset the camera according to visible actors
-		  ren->ResetCameraClippingRange();
-
 		  vrWindow->Render();
-		  renWindow->Render();
 	  }
 	 
 	  renderAR = true;
@@ -1131,7 +1126,6 @@ void mainWidget::startTrackerSlot(bool checked)
 				LOG_ERROR("Unable to locate the channel with Id=\"OvrVideoStream\". Check config file.");
 				exit(EXIT_FAILURE);
 			}
-
 			trackerChannel->GetTrackedFrame(trackedFrame);
 			leftMixer->GetChannel()->GetTrackedFrame(leftMixerFrame);
 			rightMixer->GetChannel()->GetTrackedFrame(rightMixerFrame);
@@ -1171,29 +1165,22 @@ void mainWidget::startTrackerSlot(bool checked)
 			imageImportRight->SetNumberOfScalarComponents(finalMatRight.channels());
 			imageImportRight->SetImportVoidPointer(finalMatRight.data);
 			imageImportRight->Modified();
-			imageImportRight->Update();
+			imageImportRight->Update(); 
 
 			textureLeft->SetInputConnection(imageImportLeft->GetOutputPort());
 			textureRight->SetInputConnection(imageImportRight->GetOutputPort());
 
-			// left eye point to line
-			double p2l[16] = { 0.0677294484076749, -0.992989179048552, -0.0968773044158076, -61.6285338697333,
-				0.737296753348973, 0.11523277439025, -0.665668765383645, -14.6388968911687,
-				0.672165321419851, -0.0263419437173227, 0.739932350071099, -4.60575695614759, 0, 0, 0, 1 };
-
-			renWindow->AddRenderer(ren);
 			vrWindow = dynamic_cast<vtkOpenVRRenderWindow*>(renWindow.Get());
 			vrWindow->SetTexturedBackground(true);
 			vrWindow->AddRenderer(ren);
 			vrWindow->SetLeftBackgroundTexture(textureLeft);
 			vrWindow->SetRightBackgroundTexture(textureRight);
 
-			ren->ResetCameraClippingRange();
 			vrWindow->Render();
 
 			bool isLMatrixValid(false);
 			repository->SetTransforms(leftMixerFrame);
-			if (repository->GetTransform(PlusTransformName("PointerTip", "LeftImagePlane"), tTip2ImageL, &isLMatrixValid) == PLUS_SUCCESS && isLMatrixValid);
+			if (repository->GetTransform(PlusTransformName("PointerTip", "LeftImagePlane"), tTip2ImageL, &isLMatrixValid) == PLUS_SUCCESS && isLMatrixValid)
 			{
 				posMatrixLeft->PostMultiply();
 				posMatrixLeft->Identity();
@@ -1202,7 +1189,7 @@ void mainWidget::startTrackerSlot(bool checked)
 
 			bool isRMatrixValid(false);
 			repository->SetTransforms(rightMixerFrame);
-			if (repository->GetTransform(PlusTransformName("PointerTip", "RightImagePlane"), tTip2ImageR, &isRMatrixValid) == PLUS_SUCCESS && isRMatrixValid);
+			if (repository->GetTransform(PlusTransformName("PointerTip", "RightImagePlane"), tTip2ImageR, &isRMatrixValid) == PLUS_SUCCESS && isRMatrixValid)
 			{
 				posMatrixRight->PostMultiply();
 				posMatrixRight->Identity();
@@ -1828,7 +1815,6 @@ void mainWidget::getRightTransform()
 		pixel[2][0] = 1;
 
 		// Find the inverse of the camera intrinsic param matrix
-		// TODO: Get right intrinsic parameters
 		Matrix<double> rightIntrinsicInv(3, 3);
 		invm3x3(rightIntrinsicParam, rightIntrinsicInv);
 
