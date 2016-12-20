@@ -10,6 +10,7 @@ This application requires the following:
 - OpenCV - 3.0 and up
 - Vtk - Use my fork of vtk with branch "im/vtk" as master branch of vtk 7.1 fails to send video pass through to the Oculus, build with RenderingOpenVR module and RenderingParallel module github.com/imorgan1618/VTK.git
 - Qt5
+- Elvis Math Library
 
 How to use:
 - Select: Control->Tracker Controls
