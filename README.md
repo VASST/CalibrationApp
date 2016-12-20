@@ -15,10 +15,10 @@ How to use:
 - Select: "Start Tracker" to start tracking (Note: must be connected to NDI Spectra/Vicra)
 - Select: "View Scene" to see a live stream from the Logitech.
 - Select: "View Centroid" to view the Centroid Position in the view video stream.
-- Select: "Use Calibration" to use the current point-line calibration once calibration is complete, else the pre-calculated point-line calibration will be used.
- - Select: "Pivot" to complete pivot calibration on the tool, select again once pivot is complete.
- - Select: "Start Calibration" to start the point-line calibration procedure
- - Select: "Next Pose" to capture the next position during the point-line calibration (until 15 poses have been acquired).
- - Select: "Manual Selection" if the previous automatic centroid detection was unnaceptable, and select the point manually.
- - Select: "Collect Poses" to save the current frame and transform to a file.
- - Alter lower and upper HSV values as needed for automatic segmentation
+- Select: "Use Calibration" to use the current point-line calibration once complete, else the pre-calculated point-line calibration will be used.
+- Select: "Pivot" to complete pivot calibration on the tool, select again once pivot is complete.
+- Select: "Start Calibration" to start the point-line calibration procedure
+- Select: "Next Pose" to capture the next position during the point-line calibration (until 15 poses have been acquired).
+- Select: "Manual Selection" if the previous automatic centroid detection was unnaceptable, and select the point manually.
+- Select: "Collect Poses" to save the current frame and transform to a file.
+- Alter lower and upper HSV values as needed for automatic segmentation
