@@ -1,4 +1,4 @@
-PROJECT( VRApp )
+PROJECT( CameraCalibration )
 
 CMAKE_MINIMUM_REQUIRED( VERSION 3.0 )
 
@@ -17,15 +17,10 @@ FIND_PACKAGE( vtk REQUIRED )
 INCLUDE( ${VTK_USE_FILE} )
 
 FIND_PACKAGE( PlusLib REQUIRED NO_MODULE)
-
 FIND_PACKAGE( OpenCV REQUIRED NO_MODULE)
 
-FIND_PACKAGE( OvrvisionPro REQUIRED)
-FIND_PACKAGE( OpenVR REQUIRED )
-FIND_PACKAGE( SDL REQUIRED)
 
-
-ADD_EXECUTABLE( VRApp
+ADD_EXECUTABLE( ${PROJECT_NAME}
   main.cpp
   mainWidget.cpp
   mainWidget.h
@@ -41,58 +36,15 @@ ADD_EXECUTABLE( VRApp
   svd.h
 )
 
-target_include_directories( VRApp PRIVATE ${SDL_INCLUDE_DIR} ${OPENVR_INCLUDE_DIRS})
+target_include_directories( ${PROJECT_NAME} PRIVATE ${SDL_INCLUDE_DIR})
 
-TARGET_LINK_LIBRARIES( VRApp
+TARGET_LINK_LIBRARIES( ${PROJECT_NAME}
   Qt5::Widgets #Qt
   Qt5::OpenGL #Qt
   Qt5::Core
   Qt5::Gui
-  OvrvisionPro
-  vtkndicapi
   vtkRenderingOpenVR
-  vtkRenderingFreeType
-  vtkIOImage
-  vtkFiltersTexture
-  vtkFiltersSources
-  vtkGUISupportQt
-  vtkRenderingContextOpenGL2
-  vtkParallelCore
-  vtkCommonCore
-  vtkCommonDataModel
-  vtkCommonMath
-  vtkCommonMisc
-  vtkCommonSystem
-  vtkCommonTransforms
-  vtkCommonColor
-  vtkImagingCore
-  vtkImagingHybrid
-  vtkInteractionStyle
-  vtkIOLegacy
-  vtkRenderingAnnotation
-  vtkRenderingContext2D
-  vtkRenderingCore
-  vtkRenderingParallel
-  vtkRenderingGL2PSOpenGL2
-  vtkRenderingLabel
-  vtkRenderingOpenGL2
-  vtkRenderingVolume
-  vtkRenderingQt
-  vtkRenderingImage
-  vtkRenderingVolumeOpenGL2
-  vtksys
-  vtkglew
   vtkRenderingGL2PS${VTK_RENDERING_BACKEND}
   ${OpenCV_LIBS}
-  vtkPlusCalibration
-  vtkPlusCommon
   vtkPlusDataCollection
-  vtkPlusHaptics
-  vtkPlusImageProcessing
-  vtkPlusOpenIGTLink
-  vtkPlusRendering
-  vtkPlusServer
-  vtkPlusUsSimulator
-  vtkPlusVolumeReconstruction
-  OvrvisionPro
 )
